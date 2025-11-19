@@ -5,12 +5,12 @@ namespace Application.Interface
 {
     public interface IAssetHierarchyService
     {
-        Asset GetAssetHierarchy();
-        Task<List<AssetDto>> GetByParentIdAsync(int? parentId);
-        bool InsertAsset(InsertionAssetDto currAsset);
+        Task<List<Asset>> GetAssetHierarchy();
+        Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId);
+        Task<bool> InsertAssetAsync(InsertionAssetDto dto);
 
         Task<(bool, string)> UpdateAsset(UpdateAssetDto currAsset);
 
-        Task<bool> DeleteAsset(int AssetId);
+        Task<bool> DeleteAsset(Guid AssetId);
     }
 }

@@ -6,7 +6,7 @@ namespace Domain.Entities
     public class Asset
     {
         [Key]
-        public int Id { get; set; }
+        public Guid AssetId { get; set; } = new Guid();
 
         [Required]
         [StringLength(50, MinimumLength = 3)]
@@ -14,7 +14,13 @@ namespace Domain.Entities
         public required string Name { get; set; }
         public List<Asset> Childrens { get; set; } = new List<Asset>();
         public bool IsDeleted { get; set; } = false;
-        [Range(1, int.MaxValue, ErrorMessage = "ParentId must be greater than 0.")]
-        public int? ParentId { get; set; }
+        
+        public Guid? ParentId { get; set; }
+
+        [Required]
+        [Range(0,5 ,ErrorMessage ="Heirarchy cant Cross Level 5")]
+        public int Level { get; set; }
+
+        public ICollection<AssetConfiguration> AssetConfigurations { get; set; } = new List<AssetConfiguration>();
     }
 }

@@ -1,4 +1,5 @@
-﻿using Application.DTOs;
+﻿using System.Threading.Tasks;
+using Application.DTOs;
 using Application.Interface;
 using Domain.Entities;
 using Infrastructure.DBs;
@@ -19,34 +20,18 @@ namespace Infrastructure.Service
             _context = context;
         }
 
-        public Asset GetAssetHierarchy()
-        {
+        public async Task<List<Asset>> GetAssetHierarchy()
+        { 
             try
             {
-                var allAssets = _context.Assets
+                var allAssets =await _context.Assets
                     .AsNoTracking()
                     .Where(a => !a.IsDeleted)
-                    .ToList();
+                    .ToListAsync();
 
-                // Create root if empty
-                if (allAssets.Count == 0)
-                {
-                    try
-                    {
-                        var dto = new InsertionAssetDto { ParentId = null, Name = "Root Asset" };
-                        InsertAsset(dto);
+               
 
-                        allAssets = _context.Assets.AsNoTracking().ToList();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to create root asset");
-                        return null;
-                    }
-                }
-
-                // Build tree
-                var map = allAssets.ToDictionary(a => a.Id);
+                var map = allAssets.ToDictionary(a => a.AssetId);
                 foreach (var asset in allAssets)
                 {
                     if (asset.ParentId.HasValue &&
@@ -56,7 +41,9 @@ namespace Infrastructure.Service
                     }
                 }
 
-                return allAssets.FirstOrDefault(a => a.ParentId == null);
+                var roots = allAssets.Where(a => a.ParentId == null || a.ParentId == Guid.Empty).ToList();
+
+                return roots;
             }
             catch (Exception ex)
             {
@@ -65,7 +52,7 @@ namespace Infrastructure.Service
             }
         }
 
-        public async Task<List<AssetDto>> GetByParentIdAsync(int? parentId)
+        public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId)
         {
             try
             {
@@ -74,7 +61,7 @@ namespace Infrastructure.Service
                     .Where(a => a.ParentId == parentId && !a.IsDeleted)
                     .Select(a => new AssetDto
                     {
-                        Id = a.Id,
+                        Id = a.AssetId,
                         Name = a.Name,
                         IsDeleted = a.IsDeleted
                     })
@@ -89,65 +76,75 @@ namespace Infrastructure.Service
             }
         }
 
-        public bool InsertAsset(InsertionAssetDto dto)
+        public async Task<bool> InsertAssetAsync(InsertionAssetDto dto)
         {
             try
             {
-                // Validate parent
-                if (dto.ParentId != null)
+                int level = 1;
+
+                if (dto.ParentId.HasValue)
                 {
-                    var parent = _context.Assets.FirstOrDefault(a => a.Id == dto.ParentId);
+                    Guid parentGuid = dto.ParentId.Value;
+                    var parent = await _context.Assets
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(a => a.AssetId == parentGuid);
+
                     if (parent == null)
-                        return false;
+                        throw new Exception("Parent asset not found.");
+
+                    level = parent.Level + 1;
+
+                    if (level > 5)
+                        throw new Exception("Asset cannot be added beyond Level 5.");
                 }
 
                 var newAsset = new Asset
                 {
                     Name = dto.Name,
-                    ParentId = dto.ParentId
+                    ParentId = dto.ParentId,
+                    Level = level
                 };
 
-                _context.Assets.Add(newAsset);
-                _context.SaveChanges();
+                await _context.Assets.AddAsync(newAsset);
+                await _context.SaveChangesAsync();
+
                 return true;
             }
-            catch (DbUpdateException ex) when (ex.InnerException is SqlException sqlEx)
+            catch (DbUpdateException ex)
             {
-                if (sqlEx.Number == 2601 || sqlEx.Number == 2627)
-                {
-                    _logger.LogWarning("Duplicate name detected for asset: {Name}", dto.Name);
-                    return false;
-                }
-
-                _logger.LogError(ex, "SQL error inserting asset");
-                return false;
+                _logger.LogError(ex, "Database error inserting asset.");
+                throw; // Pass DB exception to controller
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected error inserting asset");
-                return false;
+                _logger.LogError(ex, "Unexpected error inserting asset.");
+                throw; // This will be caught in controller
             }
         }
+
+
+
+
 
         public async Task<(bool, string)> UpdateAsset(UpdateAssetDto dto)
         {
             try
             {
-                var asset = await _context.Assets.FirstOrDefaultAsync(a => a.Id == dto.Id);
+                var asset = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == dto.AssetId);
                 if (asset == null)
-                    return (false, $"Asset with ID {dto.Id} not found.");
+                    return (false, $"Asset with ID {dto.AssetId} not found.");
 
-                // Validate duplicate name
+                //Validate duplicate name
                 if (!string.IsNullOrWhiteSpace(dto.NewName) && dto.NewName != dto.OldName)
                 {
                     bool nameExists = await _context.Assets
-                        .AnyAsync(a => a.Name == dto.NewName && a.Id != dto.Id);
+                        .AnyAsync(a => a.Name == dto.NewName && a.AssetId != dto.AssetId);
 
                     if (nameExists)
                         return (false, $"Asset name '{dto.NewName}' already exists.");
                 }
 
-                // Renaming only
+                //Renaming only
                 if (dto.OldParentId == dto.NewParentId && dto.OldName != dto.NewName)
                 {
                     asset.Name = dto.NewName;
@@ -155,18 +152,18 @@ namespace Infrastructure.Service
                     return (true, $"Asset renamed to {asset.Name}");
                 }
 
-                // Moving to new parent
+                //Moving to new parent
                 if (dto.OldParentId != dto.NewParentId)
                 {
-                    var newParent = await _context.Assets.FirstOrDefaultAsync(a => a.Id == dto.NewParentId);
-                    if (dto.NewParentId != 0 && newParent == null)
+                    var newParent = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == dto.NewParentId);
+                    if (dto.NewParentId != Guid.Empty && newParent == null)
                         return (false, $"New parent with ID {dto.NewParentId} not found.");
 
                     // Prevent circular move
-                    if (await IsDescendant(dto.Id, dto.NewParentId))
+                    if (await IsDescendant(dto.AssetId, dto.NewParentId))
                         return (false, "Invalid move: cannot move an asset under its own descendant.");
 
-                    asset.ParentId = dto.NewParentId == 0 ? null : dto.NewParentId;
+                    asset.ParentId = dto.NewParentId == Guid.Empty ? null : dto.NewParentId;
                     await _context.SaveChangesAsync();
                     return (true, $"Asset moved to new parent ID {dto.NewParentId}");
                 }
@@ -181,7 +178,7 @@ namespace Infrastructure.Service
         }
 
 
-        private async Task<bool> IsDescendant(int assetId, int newParentId)
+        private async Task<bool> IsDescendant(Guid assetId, Guid newParentId)
         {
             try
             {
@@ -190,7 +187,7 @@ namespace Infrastructure.Service
 
                 var children = await _context.Assets
                     .Where(a => a.ParentId == assetId)
-                    .Select(a => a.Id)
+                    .Select(a => a.AssetId)
                     .ToListAsync();
 
                 foreach (var child in children)
@@ -208,20 +205,28 @@ namespace Infrastructure.Service
             }
         }
 
-        public async Task<bool> DeleteAsset(int assetId)
+        public async Task<bool> DeleteAsset(Guid assetId)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                if (assetId == 1)
+                var asset = await _context.Assets.Include(a => a.Childrens).FirstOrDefaultAsync(a => a.AssetId == assetId);
+                
+                //if (asset.ParentId == Guid.Empty || asset.ParentId==null)
+                //{
+                //    _logger.LogWarning("Attempted to delete root asset. Operation blocked.");
+                //    return false;
+                //}
+                if (asset.Childrens!=null && asset.Childrens.Any())
                 {
-                    _logger.LogWarning("Attempted to delete root asset. Operation blocked.");
+                    throw new Exception("Cannot delete this asset because it has child assets. Please delete or reassign its children first.");
+                }
+                //var asset = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == assetId);
+                if (asset == null)
+                {
+                    _logger.LogWarning("Unable To find the Asset");
                     return false;
                 }
-                var asset = await _context.Assets.FirstOrDefaultAsync(a => a.Id == assetId);
-                if (asset == null)
-                    return false;
-
                 asset.IsDeleted = true;
 
                 _context.Assets.Update(asset);
@@ -234,7 +239,8 @@ namespace Infrastructure.Service
             {
                 await transaction.RollbackAsync();
                 _logger.LogError(ex, "Error deleting asset");
-                return false;
+                throw;
+              
             }
         }
     }

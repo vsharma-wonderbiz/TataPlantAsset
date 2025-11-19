@@ -4,8 +4,8 @@ namespace Application.DTOs
 {
     public class InsertionAssetDto
     {
-        [Range(1, int.MaxValue, ErrorMessage = "ParentId must be greater than 0.")]
-        public int? ParentId { get; set; }
+      
+        public Guid? ParentId { get; set; }
 
         [Required(ErrorMessage = "Name is required.")]
         [StringLength(100, MinimumLength = 3,

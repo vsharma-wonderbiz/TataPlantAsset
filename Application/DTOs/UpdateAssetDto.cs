@@ -6,13 +6,13 @@ namespace Application.DTOs
     {
         [Required]
         [Range(1, int.MaxValue, ErrorMessage = "Asset ID must be valid.")]
-        public int Id { get; set; }
+        public Guid AssetId { get; set; }
 
         [Range(0, int.MaxValue, ErrorMessage = "OldParentId must be valid.")]
-        public int OldParentId { get; set; }
+        public Guid OldParentId { get; set; }
 
         [Range(0, int.MaxValue, ErrorMessage = "NewParentId must be valid.")]
-        public int NewParentId { get; set; }
+        public Guid NewParentId { get; set; }
 
         // Old name not required, no validation needed
         public string? OldName { get; set; }

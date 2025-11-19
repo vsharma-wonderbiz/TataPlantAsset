@@ -1,6 +1,7 @@
 using Application.Interface;
 using Infrastructure.DBs;
 using Infrastructure.Service;
+using Infrastructure.Seeding;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,7 +27,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+//SignalType Seeder Class 
+using (var cope = app.Services.CreateScope())
+{
+    var dbcontext = cope.ServiceProvider.GetRequiredService<DBContext>();
+    await SignalTypessSeeder.SeedAsync(dbcontext);//these is the function that seeds the value 
+}
+
+    app.UseHttpsRedirection();
 
 app.UseAuthorization();
 

@@ -12,6 +12,9 @@ namespace Infrastructure.DBs
 
         }
         public DbSet<Asset> Assets { get; set; }
+        public DbSet<SignalTypes> SignalTypes { get; set; } 
+
+        public DbSet<AssetConfiguration> AssetConfigurations { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Asset>()
@@ -23,6 +26,23 @@ namespace Infrastructure.DBs
             modelBuilder.Entity<Asset>()
                 .HasIndex(a => a.Name)
                 .IsUnique();
+
+            modelBuilder.Entity<AssetConfiguration>()
+        .HasKey(ac => new { ac.AssetId, ac.SignaTypeID});
+
+            modelBuilder.Entity<AssetConfiguration>()
+                .HasOne(a => a.Asset)
+                .WithMany(a => a.AssetConfigurations)
+                .HasForeignKey(a => a.AssetId);
+
+            modelBuilder.Entity<AssetConfiguration>()
+             .HasOne(ac => ac.SignalType)
+             .WithMany(st => st.AssetConfigurations) // navigation property in SignalType
+             .HasForeignKey(ac => ac.SignaTypeID);
+
+            modelBuilder.Entity<AssetConfiguration>()
+            .HasIndex(ac => new { ac.AssetId, ac.SignaTypeID })
+            .IsUnique();
         }
     }
 }

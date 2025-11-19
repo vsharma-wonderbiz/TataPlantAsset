@@ -1,4 +1,5 @@
-﻿using Application.DTOs;
+﻿using System.Threading.Tasks;
+using Application.DTOs;
 using Application.Interface;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,15 +16,16 @@ namespace Api.Controllers
         }
 
         [HttpGet("[action]")]
-        public IActionResult GetAssetHierarchy()
+        public async Task<IActionResult> GetAssetHierarchy()
         {
-            var tree = service.GetAssetHierarchy();
+            
+            var tree = await service.GetAssetHierarchy();
             Console.WriteLine($"Data is {HttpContext.User}");
             return Ok(tree);
         }
 
         [HttpGet("[action]/{parentId?}")]
-        public async Task<List<AssetDto>> GetByParentIdAsync(int? parentId)
+        public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId)
         {
             var assets = await service.GetByParentIdAsync(parentId);
             Console.WriteLine("Recieved ........ ");
@@ -37,14 +39,23 @@ namespace Api.Controllers
         [HttpPost("[action]")]
         public async Task<IActionResult> InsertAsset([FromBody] InsertionAssetDto asset)
         {
-            bool isAdded =  service.InsertAsset(asset);
-
-            if (isAdded)
+            try
             {
-                return Ok("Asset Pushed Successfully");
+                bool isAdded = await service.InsertAssetAsync(asset);
+
+                if (isAdded)
+                    return Ok("Asset added successfully.");
+
+               
+                return BadRequest("Unable to add asset.");
             }
-            return BadRequest("Parent not found or ID already exists.");
+            catch (Exception ex)
+            {
+               //to catch the error thrown from service layer 
+                return BadRequest(ex.Message);
+            }
         }
+
 
         [HttpPut("[action]")]
         public async Task<IActionResult> UpdateAsset([FromBody] UpdateAssetDto asset)
@@ -58,15 +69,27 @@ namespace Api.Controllers
             return BadRequest(message);
         }
 
-        [HttpDelete("[action]/{id}")]
-        public async Task<IActionResult> DeleteAsset(int id)
-        {
-            bool isRemoved = await service.DeleteAsset(id);
-            if (isRemoved)
+            [HttpDelete("[action]/{id}")]
+            public async Task<IActionResult> DeleteAsset(Guid id)
             {
-                return Ok("Asset Deleted Successfully");
+                try
+                {
+
+                    bool isRemoved = await service.DeleteAsset(id);
+                    if (isRemoved)
+                    {
+                        return Ok("Asset Deleted Successfully");
+                    }
+                    else
+                    {
+                        return BadRequest("unable to delete asste ");
+                    }
+                }catch (Exception ex)
+                {
+                    return BadRequest(ex.Message);
+                }
+               
+           
             }
-            return BadRequest("Asset not found or Cannot delete Root.");
-        }
     }
 }
