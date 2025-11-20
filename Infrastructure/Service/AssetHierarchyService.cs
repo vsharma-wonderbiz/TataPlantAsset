@@ -20,45 +20,65 @@ namespace Infrastructure.Service
             _context = context;
         }
 
-        public async Task<List<Asset>> GetAssetHierarchy()
-        { 
+        public async Task<List<Asset>> GetAssetHierarchy(string? searchTerm = null)
+        {
             try
             {
-                var allAssets =await _context.Assets
+                var allAssets = await _context.Assets
                     .AsNoTracking()
                     .Where(a => !a.IsDeleted)
                     .ToListAsync();
 
-               
-
+                // Build parent-child relationships
                 var map = allAssets.ToDictionary(a => a.AssetId);
                 foreach (var asset in allAssets)
                 {
-                    if (asset.ParentId.HasValue &&
-                        map.ContainsKey(asset.ParentId.Value))
+                    if (asset.ParentId.HasValue && map.ContainsKey(asset.ParentId.Value))
                     {
                         map[asset.ParentId.Value].Childrens.Add(asset);
                     }
                 }
 
-                var roots = allAssets.Where(a => a.ParentId == null || a.ParentId == Guid.Empty).ToList();
+                // Get root assets
+                var roots = allAssets
+                    .Where(a => a.ParentId == null || a.ParentId == Guid.Empty)
+                    .ToList();
+
+                // Apply keyword filter at root level
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    string lowerTerm = searchTerm.ToLower();
+                    roots = roots
+                        .Where(a => a.Name.ToLower().Contains(lowerTerm))
+                        .ToList();
+                }
 
                 return roots;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting asset hierarchy");
-                return null;
+                _logger.LogError(ex, "Error getting asset hierarchy with search term: {searchTerm}", searchTerm);
+                return new List<Asset>();
             }
         }
 
-        public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId)
+
+        public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId, string? searchTerm)
         {
             try
             {
-                var items = await _context.Assets
+                var query = _context.Assets
                     .AsNoTracking()
-                    .Where(a => a.ParentId == parentId && !a.IsDeleted)
+                    .Where(a => a.ParentId == parentId && !a.IsDeleted);
+
+                // Apply keyword search if provided
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    var lowerTerm = searchTerm.ToLower();
+                    query = query.Where(a => a.Name.ToLower().Contains(lowerTerm));
+                }
+
+                var items = await query
                     .Select(a => new AssetDto
                     {
                         Id = a.AssetId,
@@ -71,10 +91,11 @@ namespace Infrastructure.Service
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching children for ParentId {parentId}", parentId);
+                _logger.LogError(ex, "Error fetching assets for ParentId {parentId} with term {searchTerm}", parentId, searchTerm);
                 return new List<AssetDto>();
             }
         }
+
 
         public async Task<bool> InsertAssetAsync(InsertionAssetDto dto)
         {

@@ -16,18 +16,35 @@ namespace Api.Controllers
         }
 
         [HttpGet("[action]")]
-        public async Task<IActionResult> GetAssetHierarchy()
+        public async Task<IActionResult> GetAssetHierarchy([FromQuery] string? term = null)
         {
-            
-            var tree = await service.GetAssetHierarchy();
-            Console.WriteLine($"Data is {HttpContext.User}");
-            return Ok(tree);
+            try
+            {
+                // Get full hierarchy
+                var allAssets = await service.GetAssetHierarchy();
+
+                // If keyword search is provided, filter roots only
+                if (!string.IsNullOrWhiteSpace(term))
+                {
+                    string lowerTerm = term.ToLower();
+                    allAssets = allAssets
+                        .Where(a => a.Name.ToLower().Contains(lowerTerm))
+                        .ToList();
+                }
+
+                return Ok(allAssets);
+            }
+            catch (Exception ex)
+            {
+                // log if needed
+                return StatusCode(500, "Error retrieving asset hierarchy");
+            }
         }
 
         [HttpGet("[action]/{parentId?}")]
-        public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId)
+        public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId, [FromQuery] string? term = null)
         {
-            var assets = await service.GetByParentIdAsync(parentId);
+            var assets = await service.GetByParentIdAsync(parentId, term);
             Console.WriteLine("Recieved ........ ");
             foreach (var asset in assets)
             {
@@ -91,13 +108,6 @@ namespace Api.Controllers
                
            
             }
-
-        [HttpGet("Search")]
-        public async Task<IActionResult> SearchAssets([FromQuery] string? term)
-        {
-            var results = await service.SearchAssetsAsync(term);
-            return Ok(results);
-        }
 
     }
 }
