@@ -243,5 +243,40 @@ namespace Infrastructure.Service
               
             }
         }
+
+        public async Task<List<AssetDto>> SearchAssetsAsync(string? searchTerm)
+        {
+            try
+            {
+                // Start with all non-deleted assets
+                var query = _context.Assets
+                    .AsNoTracking()
+                    .Where(a => !a.IsDeleted);
+
+                // Apply search if searchTerm is not null or empty
+                if (!string.IsNullOrWhiteSpace(searchTerm))
+                {
+                    string lowerTerm = searchTerm.ToLower();
+                    query = query.Where(a => a.Name.ToLower().Contains(lowerTerm));
+                }
+
+                var result = await query
+                    .Select(a => new AssetDto
+                    {
+                        Id = a.AssetId,
+                        Name = a.Name,
+                        IsDeleted = a.IsDeleted
+                    })
+                    .ToListAsync();
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error searching assets with term: {searchTerm}", searchTerm);
+                return new List<AssetDto>();
+            }
+        }
+
     }
 }

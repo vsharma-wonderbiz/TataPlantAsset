@@ -91,5 +91,13 @@ namespace Api.Controllers
                
            
             }
+
+        [HttpGet("Search")]
+        public async Task<IActionResult> SearchAssets([FromQuery] string? term)
+        {
+            var results = await service.SearchAssetsAsync(term);
+            return Ok(results);
+        }
+
     }
 }
