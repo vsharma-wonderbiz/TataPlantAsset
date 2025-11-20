@@ -29,11 +29,11 @@ if (app.Environment.IsDevelopment())
 }
 
 //SignalType Seeder Class 
-using (var cope = app.Services.CreateScope())
+/*using (var cope = app.Services.CreateScope())
 {
     var dbcontext = cope.ServiceProvider.GetRequiredService<DBContext>();
     await SignalTypessSeeder.SeedAsync(dbcontext);//these is the function that seeds the value 
-}
+} */
 
     app.UseHttpsRedirection();
 
