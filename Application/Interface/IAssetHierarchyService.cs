@@ -12,5 +12,7 @@ namespace Application.Interface
         Task<(bool, string)> UpdateAsset(UpdateAssetDto currAsset);
 
         Task<bool> DeleteAsset(Guid AssetId);
+        Task<List<AssetDto>> SearchAssetsAsync(string? searchTerm);
+
     }
 }
