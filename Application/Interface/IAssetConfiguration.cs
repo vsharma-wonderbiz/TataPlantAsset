@@ -3,11 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Application.DTOs;
+
 
 namespace Application.Interface
 {
     public interface IAssetConfiguration
     {
-        Task AddConfiguration(Guid Assetid);
+        Task AddConfiguration(AssetConfigurationDto Dto);
+        Task<List<SiganDetailsDto>> GetSignalDetailByAssetID(Guid Id);
+
+        Task EditSignalsOnAsset(Guid ConfigId, UpdateAssetConfigurationDto dto);
+
+        Task DeleteSigalOnAsset(Guid ConfigId);
     }
 }

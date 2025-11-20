@@ -28,7 +28,7 @@ namespace Api.Controllers
         public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId)
         {
             var assets = await service.GetByParentIdAsync(parentId);
-            Console.WriteLine("Recieved ........ ");
+            Console.WriteLine("Recieved ........");
             foreach (var asset in assets)
             {
                 Console.WriteLine($"Asset ID: {asset.Id}, Name: {asset.Name}, IsDeleted: {asset.IsDeleted}");

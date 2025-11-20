@@ -17,6 +17,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddScoped<IAssetHierarchyService, AssetHierarchyService>();
+builder.Services.AddScoped<IAssetConfiguration, AssetConfigurationService>();
 
 var app = builder.Build();
 
