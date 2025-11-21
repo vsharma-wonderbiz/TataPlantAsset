@@ -46,6 +46,7 @@ namespace Api.Controllers
         {
             var assets = await service.GetByParentIdAsync(parentId, term);
             Console.WriteLine("Recieved ........ ");
+
             foreach (var asset in assets)
             {
                 Console.WriteLine($"Asset ID: {asset.Id}, Name: {asset.Name}, IsDeleted: {asset.IsDeleted}");
@@ -108,6 +109,58 @@ namespace Api.Controllers
                
            
             }
+        // GET /api/AssetHierarchy/deleted
+        [HttpGet("deleted")]
+        public async Task<IActionResult> GetDeletedAssets()
+        {
+            try
+            {
+                var list = await service.GetDeletedAssetsAsync();
+                return Ok(list);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "An unexpected error occurred.");
+            }
+        }
+
+        // GET /api/AssetHierarchy/deleted/{id}
+        [HttpGet("deleted/{id:guid}")]
+        public async Task<IActionResult> GetDeletedAsset(Guid id)
+        {
+            try
+            {
+                var asset = await service.GetDeletedAssetAsync(id);
+                if (asset == null)
+                    return NotFound("Deleted asset not found.");
+
+                return Ok(asset);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "An unexpected error occurred.");
+            }
+        }
+
+        // POST /api/AssetHierarchy/{id}/restore
+        [HttpPost("{id:guid}/restore")]
+        public async Task<IActionResult> RestoreAsset(Guid id)
+        {
+            try
+            {
+                await service.RestoreAssetAsync(id);
+                return Ok("Asset restored successfully.");
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("Asset not found.");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, "An unexpected error occurred.");
+            }
+        }
+
 
     }
 }

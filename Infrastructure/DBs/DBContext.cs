@@ -28,7 +28,7 @@ namespace Infrastructure.DBs
                 .IsUnique();
 
             modelBuilder.Entity<AssetConfiguration>()
-        .HasKey(ac => new { ac.AssetId, ac.SignaTypeID});
+        .HasKey(ac=>ac.AssetConfigId);//primary key
 
             modelBuilder.Entity<AssetConfiguration>()
                 .HasOne(a => a.Asset)
