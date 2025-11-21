@@ -101,8 +101,16 @@ namespace Infrastructure.Service
         {
             try
             {
+                // 1️⃣ Validate Name
+                if (string.IsNullOrWhiteSpace(dto.Name) || dto.Name.Length < 3 || dto.Name.Length > 100)
+                    throw new Exception("Name must be between 3 and 100 characters.");
+
+                if (!System.Text.RegularExpressions.Regex.IsMatch(dto.Name, @"^[A-Za-z0-9 _.-]+$"))
+                    throw new Exception("Name contains invalid characters.");
+
                 int level = 1;
 
+                // 2️⃣ Check Parent and calculate level
                 if (dto.ParentId.HasValue)
                 {
                     Guid parentGuid = dto.ParentId.Value;
@@ -119,6 +127,14 @@ namespace Infrastructure.Service
                         throw new Exception("Asset cannot be added beyond Level 5.");
                 }
 
+                // 3️⃣ Check for duplicate name under same parent
+                bool exists = await _context.Assets
+                    .AnyAsync(a => a.Name == dto.Name && a.ParentId == dto.ParentId && !a.IsDeleted);
+
+                if (exists)
+                    throw new Exception("Asset with this name already exists under the selected parent.");
+
+                // 4️⃣ Create new asset
                 var newAsset = new Asset
                 {
                     Name = dto.Name,
@@ -134,14 +150,15 @@ namespace Infrastructure.Service
             catch (DbUpdateException ex)
             {
                 _logger.LogError(ex, "Database error inserting asset.");
-                throw; // Pass DB exception to controller
+                throw;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error inserting asset.");
-                throw; // This will be caught in controller
+                throw;
             }
         }
+
 
 
 

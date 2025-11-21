@@ -8,27 +8,26 @@ using System.Linq;
 using System.Threading.Tasks;
 using TataPlantAsset.Application.Tests.Fixtures;
 using Xunit;
+using Moq;
 
 namespace TataPlantAsset.Application.Tests.Services
 {
     public class AssetReadTests
     {
         private readonly DbContextFixture _fixture;
-
-        public AssetReadTests()
+        private readonly Mock<ILogger<AssetHierarchyService>> _mockLogger;
+    public AssetReadTests()
         {
             _fixture = new DbContextFixture();
+            _mockLogger = new Mock<ILogger<AssetHierarchyService>>();
         }
 
         [Fact]
         public async Task GetByParentId_Should_Return_Assets()
         {
-            // Arrange
             var context = _fixture.CreateContext();
-            var logger = new LoggerFactory().CreateLogger<AssetHierarchyService>();
-            var service = new AssetHierarchyService(logger, context);
+            var service = new AssetHierarchyService(_mockLogger.Object, context);
 
-            // Insert parent and child
             var parentDto = new InsertionAssetDto { Name = "ParentAsset" };
             await service.InsertAssetAsync(parentDto);
             var parent = await context.Assets.FirstAsync(a => a.Name == "ParentAsset");
@@ -36,10 +35,8 @@ namespace TataPlantAsset.Application.Tests.Services
             var childDto = new InsertionAssetDto { Name = "ChildAsset", ParentId = parent.AssetId };
             await service.InsertAssetAsync(childDto);
 
-            // Act
-            var children = await service.GetByParentIdAsync(parent.AssetId);
+            var children = await service.GetByParentIdAsync(parent.AssetId, null);
 
-            // Assert
             children.Should().HaveCount(1);
             children.First().Name.Should().Be("ChildAsset");
         }
@@ -47,19 +44,52 @@ namespace TataPlantAsset.Application.Tests.Services
         [Fact]
         public async Task GetAssetHierarchy_Should_Return_Roots()
         {
-            // Arrange
             var context = _fixture.CreateContext();
-            var logger = new LoggerFactory().CreateLogger<AssetHierarchyService>();
-            var service = new AssetHierarchyService(logger, context);
+            var service = new AssetHierarchyService(_mockLogger.Object, context);
 
             await service.InsertAssetAsync(new InsertionAssetDto { Name = "Root1" });
             await service.InsertAssetAsync(new InsertionAssetDto { Name = "Root2" });
 
-            // Act
             var roots = await service.GetAssetHierarchy();
 
-            // Assert
             roots.Should().HaveCount(2);
+        }
+
+        [Fact]
+        public async Task GetByParentId_Should_Return_EmptyList_When_ParentNotFound()
+        {
+            var context = _fixture.CreateContext();
+            var service = new AssetHierarchyService(_mockLogger.Object, context);
+
+            var result = await service.GetByParentIdAsync(Guid.NewGuid(), null);
+
+            result.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GetAssetHierarchy_Should_Return_Empty_When_SearchTermNoMatch()
+        {
+            var context = _fixture.CreateContext();
+            var service = new AssetHierarchyService(_mockLogger.Object, context);
+
+            await service.InsertAssetAsync(new InsertionAssetDto { Name = "RootAsset" });
+
+            var roots = await service.GetAssetHierarchy("NonExistent");
+
+            roots.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task SearchAssets_Should_Be_CaseInsensitive()
+        {
+            var context = _fixture.CreateContext();
+            var service = new AssetHierarchyService(_mockLogger.Object, context);
+
+            await service.InsertAssetAsync(new InsertionAssetDto { Name = "CaseTest" });
+
+            var results = await service.SearchAssetsAsync("casetest");
+
+            results.Should().HaveCount(1);
         }
     }
 }
