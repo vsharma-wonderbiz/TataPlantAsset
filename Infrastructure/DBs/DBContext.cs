@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Reflection.Emit;
 using Microsoft.EntityFrameworkCore;
+using MappingService.Domain.Entities;
 
 namespace Infrastructure.DBs
 {
@@ -15,6 +16,8 @@ namespace Infrastructure.DBs
         public DbSet<SignalTypes> SignalTypes { get; set; } 
 
         public DbSet<AssetConfiguration> AssetConfigurations { get; set; }
+
+        public DbSet<AssetSignalDeviceMapping> MappingTable { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Asset>()

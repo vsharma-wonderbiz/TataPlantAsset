@@ -14,6 +14,7 @@ namespace Application.DTOs
         public string SignalName { get; set; }
 
         public string SignalUnit { get; set; }
+        public int RegsiterAdress { get; set; }
 
     }
 }

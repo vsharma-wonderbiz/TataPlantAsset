@@ -19,6 +19,8 @@ namespace Domain.Entities
         [Required]
         public string SignalUnit { get; set; } = null!;
 
+        public int DefaultRegisterAdress {  get; set; }
+
         public ICollection<AssetConfiguration> AssetConfigurations { get; set; } = new List<AssetConfiguration>();
     }
 }

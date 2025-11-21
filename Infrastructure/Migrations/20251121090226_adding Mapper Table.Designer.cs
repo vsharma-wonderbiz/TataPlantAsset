@@ -4,6 +4,7 @@ using Infrastructure.DBs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    partial class DBContextModelSnapshot : ModelSnapshot
+    [Migration("20251121090226_adding Mapper Table")]
+    partial class addingMapperTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -80,9 +83,6 @@ namespace Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("DefaultRegisterAdress")
-                        .HasColumnType("int");
-
                     b.Property<string>("SignalName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -117,16 +117,15 @@ namespace Infrastructure.Migrations
                     b.Property<int>("RegisterAdress")
                         .HasColumnType("int");
 
+                    b.Property<Guid>("RegisterId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("SignalName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid>("SignalTypeId")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("SignalUnit")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("MappingId");
 

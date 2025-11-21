@@ -74,7 +74,9 @@ namespace Infrastructure.Service
                         AssetConfigID = a.AssetConfigId,
                         SignalTypeID = a.SignaTypeID,
                         SignalName = a.SignalType.SignalName,
-                        SignalUnit = a.SignalType.SignalUnit
+                        SignalUnit = a.SignalType.SignalUnit,
+                        RegsiterAdress=a.SignalType.DefaultRegisterAdress
+
                     }).ToListAsync();
 
                 return Details;
