@@ -18,7 +18,7 @@ namespace Api.Controllers
         [HttpGet("[action]")]
         public async Task<IActionResult> GetAssetHierarchy()
         {
-            
+
             var tree = await service.GetAssetHierarchy();
             Console.WriteLine($"Data is {HttpContext.User}");
             return Ok(tree);
@@ -46,12 +46,12 @@ namespace Api.Controllers
                 if (isAdded)
                     return Ok("Asset added successfully.");
 
-               
+
                 return BadRequest("Unable to add asset.");
             }
             catch (Exception ex)
             {
-               //to catch the error thrown from service layer 
+                //to catch the error thrown from service layer 
                 return BadRequest(ex.Message);
             }
         }
@@ -69,28 +69,29 @@ namespace Api.Controllers
             return BadRequest(message);
         }
 
-            [HttpDelete("[action]/{id}")]
-            public async Task<IActionResult> DeleteAsset(Guid id)
+        [HttpDelete("[action]/{id}")]
+        public async Task<IActionResult> DeleteAsset(Guid id)
+        {
+            try
             {
-                try
-                {
 
-                    bool isRemoved = await service.DeleteAsset(id);
-                    if (isRemoved)
-                    {
-                        return Ok("Asset Deleted Successfully");
-                    }
-                    else
-                    {
-                        return BadRequest("unable to delete asste ");
-                    }
-                }catch (Exception ex)
+                bool isRemoved = await service.DeleteAsset(id);
+                if (isRemoved)
                 {
-                    return BadRequest(ex.Message);
+                    return Ok("Asset Deleted Successfully");
                 }
-               
-           
+                else
+                {
+                    return BadRequest("unable to delete asste ");
+                }
             }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+
+
+        }
 
         [HttpGet("Search")]
         public async Task<IActionResult> SearchAssets([FromQuery] string? term)
@@ -98,6 +99,45 @@ namespace Api.Controllers
             var results = await service.SearchAssetsAsync(term);
             return Ok(results);
         }
+
+        [HttpGet("Deleted")]
+        public async Task<IActionResult> GetDeletedAssets()
+        {
+            try
+            {
+                var deletedAssets = await service.GetDeletedAssetsAsync();
+                return Ok(deletedAssets);
+            }
+            catch (Exception ex)
+            {
+                // Log error if you have logger injected
+                return StatusCode(500, $"Error retrieving deleted assets: {ex.Message}");
+            }
+        }
+
+        [HttpPost("Restore/{id}")]
+        public async Task<IActionResult> RestoreAsset(Guid id)
+        {
+            try
+            {
+                await service.RestoreAssetAsync(id);
+                return Ok("Asset restored successfully.");
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("Asset not found.");
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error restoring asset: {ex.Message}");
+            }
+        }
+
+
 
     }
 }
