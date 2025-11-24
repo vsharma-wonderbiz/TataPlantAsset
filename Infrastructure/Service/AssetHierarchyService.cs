@@ -210,23 +210,22 @@ namespace Infrastructure.Service
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var asset = await _context.Assets.Include(a => a.Childrens).FirstOrDefaultAsync(a => a.AssetId == assetId);
-                
-                //if (asset.ParentId == Guid.Empty || asset.ParentId==null)
-                //{
-                //    _logger.LogWarning("Attempted to delete root asset. Operation blocked.");
-                //    return false;
-                //}
-                if (asset.Childrens!=null && asset.Childrens.Any())
+                var asset = await _context.Assets
+                    .Include(a => a.Childrens.Where(c => !c.IsDeleted))//see only the active children
+                    .FirstOrDefaultAsync(a => a.AssetId == assetId);
+
+                if (asset == null)
+                {
+                    _logger.LogWarning("Unable to find the Asset");
+                    return false;
+                }
+
+                //see only active children
+                if (asset.Childrens.Any())
                 {
                     throw new Exception("Cannot delete this asset because it has child assets. Please delete or reassign its children first.");
                 }
-                //var asset = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == assetId);
-                if (asset == null)
-                {
-                    _logger.LogWarning("Unable To find the Asset");
-                    return false;
-                }
+
                 asset.IsDeleted = true;
 
                 _context.Assets.Update(asset);
@@ -240,9 +239,9 @@ namespace Infrastructure.Service
                 await transaction.RollbackAsync();
                 _logger.LogError(ex, "Error deleting asset");
                 throw;
-              
             }
         }
+
 
         public async Task<List<AssetDto>> SearchAssetsAsync(string? searchTerm)
         {
