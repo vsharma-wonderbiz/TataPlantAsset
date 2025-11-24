@@ -82,12 +82,12 @@ namespace Infrastructure.Service
             {
                 int level = 1;
 
+                //Handle parent level logic
                 if (dto.ParentId.HasValue)
                 {
-                    Guid parentGuid = dto.ParentId.Value;
                     var parent = await _context.Assets
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(a => a.AssetId == parentGuid);
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(a => a.AssetId == dto.ParentId.Value && !a.IsDeleted);
 
                     if (parent == null)
                         throw new Exception("Parent asset not found.");
@@ -98,6 +98,29 @@ namespace Infrastructure.Service
                         throw new Exception("Asset cannot be added beyond Level 5.");
                 }
 
+                //Check existing name (even if deleted)
+                var existing = await _context.Assets
+                    .FirstOrDefaultAsync(a => a.Name == dto.Name);
+
+                if (existing != null)
+                {
+                    if (existing.IsDeleted)
+                    {
+                        // Restore the deleted asset
+                        existing.IsDeleted = false;
+                        existing.ParentId = dto.ParentId;
+                        existing.Level = level;
+
+                        _context.Assets.Update(existing);
+                        await _context.SaveChangesAsync();
+
+                        return true;
+                    }
+
+                    throw new Exception("Asset name already exists.");
+                }
+
+                //Insert new asset
                 var newAsset = new Asset
                 {
                     Name = dto.Name,
@@ -113,14 +136,16 @@ namespace Infrastructure.Service
             catch (DbUpdateException ex)
             {
                 _logger.LogError(ex, "Database error inserting asset.");
-                throw; // Pass DB exception to controller
+                throw new Exception("Database error occurred while inserting asset. Details: " + ex.InnerException?.Message);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error inserting asset.");
-                throw; // This will be caught in controller
+                throw;
             }
         }
+
+
 
 
 
