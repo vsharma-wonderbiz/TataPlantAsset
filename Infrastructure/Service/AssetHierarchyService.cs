@@ -21,15 +21,15 @@ namespace Infrastructure.Service
         }
 
         public async Task<List<Asset>> GetAssetHierarchy()
-        { 
+        {
             try
             {
-                var allAssets =await _context.Assets
+                var allAssets = await _context.Assets
                     .AsNoTracking()
                     .Where(a => !a.IsDeleted)
                     .ToListAsync();
 
-               
+
 
                 var map = allAssets.ToDictionary(a => a.AssetId);
                 foreach (var asset in allAssets)
@@ -226,7 +226,7 @@ namespace Infrastructure.Service
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking descendant relationship");
-                return true; 
+                return true;
             }
         }
 
@@ -301,6 +301,48 @@ namespace Infrastructure.Service
                 return new List<AssetDto>();
             }
         }
+
+        public async Task<List<AssetDto>> GetDeletedAssetsAsync()
+        {
+            try
+            {
+                var deletedAssets = await _context.Assets
+                    .AsNoTracking()
+                    .Where(a => a.IsDeleted)
+                    .Select(a => new AssetDto
+                    {
+                        Id = a.AssetId,
+                        Name = a.Name,
+                        IsDeleted = a.IsDeleted
+                    })
+                    .ToListAsync();
+
+                return deletedAssets;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching deleted assets");
+                return new List<AssetDto>();
+            }
+        }
+
+
+        public async Task<bool> RestoreAssetAsync(Guid assetId)
+        {
+            var asset = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == assetId);
+            if (asset == null)
+                throw new KeyNotFoundException("Asset not found.");
+
+            if (!asset.IsDeleted)
+                throw new InvalidOperationException("Asset is not deleted.");
+
+            asset.IsDeleted = false;
+            _context.Assets.Update(asset);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+
 
     }
 }
