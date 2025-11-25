@@ -4,6 +4,7 @@ using Infrastructure.DBs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    partial class DBContextModelSnapshot : ModelSnapshot
+    [Migration("20251124044927_init")]
+    partial class init
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -74,79 +77,6 @@ namespace Infrastructure.Migrations
                     b.ToTable("AssetConfigurations");
                 });
 
-            modelBuilder.Entity("Domain.Entities.SignalData", b =>
-                {
-                    b.Property<long>("SignalDataId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("SignalDataId"));
-
-                    b.Property<Guid>("AssetId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<double?>("AvgValue")
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("float");
-
-                    b.Property<DateTime>("BucketStartUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("Count")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("DeviceId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("DevicePortId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<double?>("MaxValue")
-                        .HasColumnType("float");
-
-                    b.Property<double?>("MinValue")
-                        .HasColumnType("float");
-
-                    b.Property<int?>("RegisterAddress")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SignalName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<Guid>("SignalTypeId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("SignalUnit")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<double>("Sum")
-                        .HasColumnType("float");
-
-                    b.HasKey("SignalDataId");
-
-                    b.HasIndex("AssetId", "BucketStartUtc")
-                        .HasDatabaseName("IX_SignalData_Asset_Bucket");
-
-                    b.HasIndex("SignalTypeId", "BucketStartUtc")
-                        .HasDatabaseName("IX_SignalData_SignalType_Bucket");
-
-                    b.HasIndex("DeviceId", "DevicePortId", "BucketStartUtc")
-                        .HasDatabaseName("IX_SignalData_Device_Bucket");
-
-                    b.HasIndex("AssetId", "SignalTypeId", "DeviceId", "DevicePortId", "BucketStartUtc")
-                        .IsUnique()
-                        .HasDatabaseName("UX_SignalData_BucketKey");
-
-                    b.ToTable("SignalData");
-                });
-
             modelBuilder.Entity("Domain.Entities.SignalTypes", b =>
                 {
                     b.Property<Guid>("SignalTypeID")
@@ -202,12 +132,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("MappingId");
-
-                    b.HasIndex("AssetId", "SignalTypeId")
-                        .HasDatabaseName("IX_Mapping_Asset_Signal");
-
-                    b.HasIndex("DeviceId", "DevicePortId")
-                        .HasDatabaseName("IX_Mapping_Device_Port");
 
                     b.ToTable("MappingTable");
                 });

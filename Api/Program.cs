@@ -1,46 +1,87 @@
-using Application.Interface;
+﻿using Application.Interface;
 using Infrastructure.DBs;
 using Infrastructure.Service;
 using Infrastructure.Seeding;
 using Microsoft.EntityFrameworkCore;
 using Infrastructure.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// -------------------- Configuration --------------------
+builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
+
 var configuration = builder.Configuration;
 var connectionString = configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<DBContext>(options => options.UseSqlServer(connectionString));
 
+// -------------------- DbContext / DbContextFactory --------------------
+// Use AddDbContextFactory for background services and caching
+builder.Services.AddDbContextFactory<DBContext>(options =>
+    options.UseSqlServer(connectionString));
+
+// -------------------- Controllers --------------------
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
+// -------------------- Swagger / OpenAPI --------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// -------------------- CORS --------------------
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp", policyBuilder =>
+    {
+        policyBuilder
+            .WithOrigins("http://localhost:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
+// -------------------- Scoped Services --------------------
 builder.Services.AddScoped<IAssetHierarchyService, AssetHierarchyService>();
 builder.Services.AddScoped<IAssetConfiguration, AssetConfigurationService>();
 builder.Services.AddScoped<IMappingService, AssetMappingService>();
 
+// -------------------- Singleton / Cache --------------------
+builder.Services.AddSingleton<IMappingCache>(sp =>
+{
+    var dbFactory = sp.GetRequiredService<IDbContextFactory<DBContext>>();
+    return new MappingCache(dbFactory); // default refresh interval 60s
+});
+
+// -------------------- Background Services --------------------
+builder.Services.AddHostedService<TelemetryBackgroundService>();
+
+// -------------------- Build App --------------------
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// -------------------- Swagger UI --------------------
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-//SignalType Seeder Class 
-using (var cope = app.Services.CreateScope())
+// -------------------- Seeder Execution --------------------
+using (var scope = app.Services.CreateScope())
 {
-    var dbcontext = cope.ServiceProvider.GetRequiredService<DBContext>();
-    await SignalTypessSeeder.SeedAsync(dbcontext);//these is the function that seeds the value 
-} 
+    var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DBContext>>();
+    // Use factory to create a context for seeding
+    using var dbContext = dbContextFactory.CreateDbContext();
+    await SignalTypessSeeder.SeedAsync(dbContext);
+}
 
+// -------------------- Middleware --------------------
 app.UseHttpsRedirection();
+
+// Apply CORS
+app.UseCors("AllowReactApp");
 
 app.UseAuthorization();
 
 app.MapControllers();
 
+// -------------------- Run App --------------------
 app.Run();
