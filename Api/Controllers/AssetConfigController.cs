@@ -86,6 +86,20 @@ namespace Api.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpGet("SiganlTypes")]
+         public async Task<IActionResult> GetSignalTypes()
+        {
+            try
+            {
+                var Signals = await _config.GetSiganlsToCoonfigure();
+
+                return Ok(Signals);
+            }catch(Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
         
     }
 }
