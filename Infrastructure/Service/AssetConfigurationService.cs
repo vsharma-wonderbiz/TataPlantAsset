@@ -28,16 +28,25 @@ namespace Infrastructure.Service
             if (asset == null)
                 throw new Exception("Asset not found");
 
-            if (asset.Level <=2)
-                throw new Exception("Configuration Can be added Only On Machines");
+            if (asset.Level <= 2)
+                throw new Exception("Configuration can be added only on Machines");
 
-            if (asset.AssetConfigurations.Any())
-                throw new Exception("Asset Configuration Exists");
+            // Get signals already configured
+            var existingSignals = asset.AssetConfigurations
+                                       .Select(c => c.SignaTypeID)
+                                       .ToHashSet();
+
+            // Check for duplicates
+            var duplicate = Dto.Signals.Where(s => existingSignals.Contains(s)).ToList();
+
+            if (duplicate.Any())
+                throw new Exception("These signals are already configured: " + string.Join(",", duplicate));
 
             try
             {
-                //Adding ll the signals id coming fro the post to the configuration table
-                var configs = Dto.Signals
+                // Add only new signals
+                var newConfigs = Dto.Signals
+                    .Where(s => !existingSignals.Contains(s)) // only new
                     .Select(signalId => new AssetConfiguration
                     {
                         AssetId = Dto.AssetId,
@@ -45,7 +54,7 @@ namespace Infrastructure.Service
                     })
                     .ToList();
 
-                await _db.AssetConfigurations.AddRangeAsync(configs);
+                await _db.AssetConfigurations.AddRangeAsync(newConfigs);
                 await _db.SaveChangesAsync();
             }
             catch (Exception ex)
@@ -55,8 +64,9 @@ namespace Infrastructure.Service
         }
 
 
+
         //get the which signals are connetcde on asset by asset id 
-       public async Task<List<SiganDetailsDto>> GetSignalDetailByAssetID(Guid Id)
+        public async Task<List<SiganDetailsDto>> GetSignalDetailByAssetID(Guid Id)
         {
             var asset = await _db.Assets.Include(a => a.AssetConfigurations)
                                        .FirstOrDefaultAsync(a => a.AssetId == Id);
