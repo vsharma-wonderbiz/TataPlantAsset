@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Application.DTOs;
+using Domain.Entities;
 
 
 namespace Application.Interface
@@ -16,5 +17,7 @@ namespace Application.Interface
         Task EditSignalsOnAsset(Guid ConfigId, UpdateAssetConfigurationDto dto);
 
         Task DeleteSigalOnAsset(Guid ConfigId);
+
+        Task<List<SignalTypes>> GetSiganlsToCoonfigure();
     }
 }

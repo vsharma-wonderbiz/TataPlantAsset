@@ -14,5 +14,10 @@ namespace Application.Interface
         Task<bool> DeleteAsset(Guid AssetId);
         Task<List<AssetDto>> SearchAssetsAsync(string? searchTerm);
 
+        Task<List<AssetDto>> GetDeletedAssetsAsync();
+
+        Task<bool> RestoreAssetAsync(Guid assetId);
+
+
     }
 }

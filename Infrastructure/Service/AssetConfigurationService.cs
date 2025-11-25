@@ -126,5 +126,19 @@ namespace Infrastructure.Service
         }
 
 
+        public async Task<List<SignalTypes>> GetSiganlsToCoonfigure()
+        {
+            try
+            {
+                var Signals = await _db.SignalTypes.ToListAsync();
+
+                return Signals;
+            }catch(Exception ex)
+            {
+                throw new Exception("Some Error OCcured", ex);
+            }
+        }
+
+
     }
 }
