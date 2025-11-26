@@ -96,6 +96,7 @@ namespace Infrastructure.Service
                 throw new Exception("Error adding asset configurations", ex);
             }
         }
+    
 
 
         //get the which signals are connetcde on asset by asset id 
