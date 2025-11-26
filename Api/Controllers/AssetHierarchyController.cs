@@ -58,14 +58,13 @@ namespace Api.Controllers
 
 
         [HttpPut("[action]")]
-        public async Task<IActionResult> UpdateAsset([FromBody] UpdateAssetDto asset)
+        public async Task<IActionResult> UpdateAsset([FromBody] UpdateAssetDto dto)
         {
-            var (isAdded, message) = await service.UpdateAsset(asset);
+            var (isAdded, message) =await service.UpdateAssetName(dto);
 
             if (isAdded)
-            {
                 return Ok(message);
-            }
+
             return BadRequest(message);
         }
 

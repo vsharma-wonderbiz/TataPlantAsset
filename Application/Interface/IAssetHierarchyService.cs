@@ -9,7 +9,7 @@ namespace Application.Interface
         Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId);
         Task<bool> InsertAssetAsync(InsertionAssetDto dto);
 
-        Task<(bool, string)> UpdateAsset(UpdateAssetDto currAsset);
+        Task<(bool Success, string Message)> UpdateAssetName(UpdateAssetDto dto);
 
         Task<bool> DeleteAsset(Guid AssetId);
         Task<List<AssetDto>> SearchAssetsAsync(string? searchTerm);
