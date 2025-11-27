@@ -55,52 +55,51 @@ namespace Infrastructure.Service
         //}
 
         public async Task AddConfiguration(AssetConfigurationDto Dto)
-        {
-            var asset = await _db.Assets.Include(a => a.AssetConfigurations)
-                                        .FirstOrDefaultAsync(a => a.AssetId == Dto.AssetId);
+ {
+     var asset = await _db.Assets.Include(a => a.AssetConfigurations)
+                                 .FirstOrDefaultAsync(a => a.AssetId == Dto.AssetId);
 
-            if (asset == null)
-                throw new Exception("Asset not found");
+     if (asset == null)
+         throw new Exception("Asset not found");
 
-            if (asset.Level <= 2)
-                throw new Exception("Configuration can be added only on Machines");
+     if (asset.Level <= 2)
+         throw new Exception("Configuration can be added only on Machines");
 
-            // Get signals already configured
-            var existingSignals = asset.AssetConfigurations
-                                       .Select(c => c.SignaTypeID)
-                                       .ToHashSet();
+     // Get signals already configured
+     var existingSignals = asset.AssetConfigurations
+                                .Select(c => c.SignaTypeID)
+                                .ToHashSet();
 
-            // Check for duplicates
-            var duplicate = Dto.Signals.Where(s => existingSignals.Contains(s)).ToList();
+     // Check for duplicates
+     var duplicate = Dto.Signals.Where(s => existingSignals.Contains(s)).ToList();
 
-            if (duplicate.Any())
-                throw new Exception("These signals are already configured: " + string.Join(",", duplicate));
+     if (duplicate.Any())
+         throw new Exception("These signals are already configured: " + string.Join(",", duplicate));
 
-            try
-            {
-                // Add only new signals
-                var newConfigs = Dto.Signals
-                    .Where(s => !existingSignals.Contains(s)) // only new
-                    .Select(signalId => new AssetConfiguration
-                    {
-                        AssetId = Dto.AssetId,
-                        SignaTypeID = signalId
-                    })
-                    .ToList();
+     try
+     {
+         // Add only new signals
+         var newConfigs = Dto.Signals
+             .Where(s => !existingSignals.Contains(s)) // only new
+             .Select(signalId => new AssetConfiguration
+             {
+                 AssetId = Dto.AssetId,
+                 SignaTypeID = signalId
+             })
+             .ToList();
 
-                await _db.AssetConfigurations.AddRangeAsync(newConfigs);
-                await _db.SaveChangesAsync();
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Error adding asset configurations", ex);
-            }
-        }
-    
+         await _db.AssetConfigurations.AddRangeAsync(newConfigs);
+         await _db.SaveChangesAsync();
+     }
+     catch (Exception ex)
+     {
+         throw new Exception("Error adding asset configurations", ex);
+     }
+ }
 
 
         //get the which signals are connetcde on asset by asset id 
-        public async Task<List<SiganDetailsDto>> GetSignalDetailByAssetID(Guid Id)
+       public async Task<List<SiganDetailsDto>> GetSignalDetailByAssetID(Guid Id)
         {
             var asset = await _db.Assets.Include(a => a.AssetConfigurations)
                                        .FirstOrDefaultAsync(a => a.AssetId == Id);
