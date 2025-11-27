@@ -283,6 +283,12 @@ namespace Infrastructure.Service
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+
+                bool ConnectedToDevice = await _context.MappingTable.AnyAsync(a => a.AssetId == assetId);
+
+                if (ConnectedToDevice)
+                    throw new Exception("Unassign the Device to Delete the asset");
+
                 var asset = await _context.Assets
                     .Include(a => a.Childrens.Where(c => !c.IsDeleted))//see only the active children
                     .FirstOrDefaultAsync(a => a.AssetId == assetId);
