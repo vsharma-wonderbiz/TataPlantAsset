@@ -57,5 +57,18 @@ namespace MappingService.Controllers
                 return StatusCode(500, new { Message = ex.Message });
             }
         }
+
+        [HttpDelete("{AssetId}")]
+        public async Task<IActionResult> UnAssignDevicesFromAsset(Guid AssetId)
+        {
+            try
+            {
+                await _mappingService.UnassignDevice(AssetId);
+                return Ok("Device Disconnected Successfully");
+            }catch(Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
     }
 }

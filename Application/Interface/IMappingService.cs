@@ -13,5 +13,7 @@ namespace Application.Interface
     {
         Task<List<AssetSignalDeviceMapping>> CreateMapping(CreateMappingDto dto);
         Task<List<AssetSignalDeviceMapping>> GetMappings();
+
+        Task UnassignDevice(Guid AssetId);
     }
 }

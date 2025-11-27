@@ -20,7 +20,7 @@ namespace Infrastructure.Services
         public async Task<List<AssetSignalDeviceMapping>> CreateMapping(CreateMappingDto dto)
         {
             
-            // Step 1: get all signals of this asset
+            //saare signal extract karo 
             var assetSignals = await _db.AssetConfigurations
                 .Where(x => x.AssetId == dto.AssetId)
                 .Select(x => x.SignalType)
@@ -34,7 +34,7 @@ namespace Infrastructure.Services
                 throw new Exception("Asset Already Connected To device");
           
 
-            // Step 2: create mapping for each signal
+            //har ek isgnal ke liye mapping hoga 
             try
             {
                 List<AssetSignalDeviceMapping> mappings = new();
@@ -79,6 +79,30 @@ namespace Infrastructure.Services
         public async Task<List<AssetSignalDeviceMapping>> GetMappings()
         {
             return await _db.MappingTable.ToListAsync();
+        }
+
+        public async Task UnassignDevice(Guid assetId)
+        {
+            try
+            {
+                var assetExists = await _db.Assets.AnyAsync(a => a.AssetId == assetId);
+                if (!assetExists)
+                    throw new Exception("Asset Not Found");
+
+                var mappings = await _db.MappingTable
+                                       .Where(m => m.AssetId == assetId)
+                                       .ToListAsync();
+
+                if (mappings.Count == 0)
+                    throw new Exception("No device mapped to this asset");
+
+                _db.MappingTable.RemoveRange(mappings);
+                await _db.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error while unassigning device: {ex.Message}", ex);
+            }
         }
     }
 }

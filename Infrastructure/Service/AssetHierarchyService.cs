@@ -210,7 +210,7 @@ namespace Infrastructure.Service
                 if (asset == null)
                     return (false, $"Asset with ID {dto.AssetId} not found.");
 
-                // Check if name already exists, even if deleted
+                //already exits
                 var existing = await _context.Assets
                     .FirstOrDefaultAsync(a => a.Name == dto.NewName && a.AssetId != dto.AssetId);
 
@@ -218,9 +218,9 @@ namespace Infrastructure.Service
                 {
                     if (existing.IsDeleted)
                     {
-                        // Restore the soft-deleted asset
+                        //edite ke wakt agar woh soft deleted hai toh ussi ko store restore karo 
                         existing.IsDeleted = false;
-                        existing.ParentId = asset.ParentId;  // Keep it under the same parent as renamed asset
+                        existing.ParentId = asset.ParentId;
                         existing.Level = asset.Level;
 
                         _context.Assets.Update(existing);
