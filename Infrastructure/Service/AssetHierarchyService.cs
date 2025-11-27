@@ -151,7 +151,58 @@ namespace Infrastructure.Service
 
 
 
-        public async Task<(bool, string)> UpdateAsset(UpdateAssetDto dto)
+        //public async Task<(bool, string)> UpdateAsset(UpdateAssetDto dto)
+        //{
+        //    try
+        //    {
+        //        var asset = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == dto.AssetId);
+        //        if (asset == null)
+        //            return (false, $"Asset with ID {dto.AssetId} not found.");
+
+        //        //Validate duplicate name
+        //        if (!string.IsNullOrWhiteSpace(dto.NewName) && dto.NewName != dto.OldName)
+        //        {
+        //            bool nameExists = await _context.Assets
+        //                .AnyAsync(a => a.Name == dto.NewName && a.AssetId != dto.AssetId);
+
+        //            if (nameExists)
+        //                return (false, $"Asset name '{dto.NewName}' already exists.");
+        //        }
+
+        //        //Renaming only
+        //        if (dto.OldParentId == dto.NewParentId && dto.OldName != dto.NewName)
+        //        {
+        //            asset.Name = dto.NewName;
+        //            await _context.SaveChangesAsync();
+        //            return (true, $"Asset renamed to {asset.Name}");
+        //        }
+
+        //        //Moving to new parent
+        //        if (dto.OldParentId != dto.NewParentId)
+        //        {
+        //            var newParent = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == dto.NewParentId);
+        //            if (dto.NewParentId != Guid.Empty && newParent == null)
+        //                return (false, $"New parent with ID {dto.NewParentId} not found.");
+
+        //            // Prevent circular move
+        //            if (await IsDescendant(dto.AssetId, dto.NewParentId))
+        //                return (false, "Invalid move: cannot move an asset under its own descendant.");
+
+        //            asset.ParentId = dto.NewParentId == Guid.Empty ? null : dto.NewParentId;
+        //            await _context.SaveChangesAsync();
+        //            return (true, $"Asset moved to new parent ID {dto.NewParentId}");
+        //        }
+
+        //        return (false, "No changes detected.");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Error updating asset");
+        //        return (false, "Unexpected error occurred while updating asset.");
+        //    }
+        //}
+
+        public async Task<(bool Success, string Message)> UpdateAssetName(UpdateAssetDto dto)
         {
             try
             {
@@ -159,45 +210,42 @@ namespace Infrastructure.Service
                 if (asset == null)
                     return (false, $"Asset with ID {dto.AssetId} not found.");
 
-                //Validate duplicate name
-                if (!string.IsNullOrWhiteSpace(dto.NewName) && dto.NewName != dto.OldName)
-                {
-                    bool nameExists = await _context.Assets
-                        .AnyAsync(a => a.Name == dto.NewName && a.AssetId != dto.AssetId);
+                // Check if name already exists, even if deleted
+                var existing = await _context.Assets
+                    .FirstOrDefaultAsync(a => a.Name == dto.NewName && a.AssetId != dto.AssetId);
 
-                    if (nameExists)
-                        return (false, $"Asset name '{dto.NewName}' already exists.");
+                if (existing != null)
+                {
+                    if (existing.IsDeleted)
+                    {
+                        // Restore the soft-deleted asset
+                        existing.IsDeleted = false;
+                        existing.ParentId = asset.ParentId;  // Keep it under the same parent as renamed asset
+                        existing.Level = asset.Level;
+
+                        _context.Assets.Update(existing);
+                        await _context.SaveChangesAsync();
+
+                        return (true, $"Soft-deleted asset '{existing.Name}' has been restored.");
+                    }
+
+                    return (false, $"Asset name '{dto.NewName}' already exists.");
                 }
 
-                //Renaming only
-                if (dto.OldParentId == dto.NewParentId && dto.OldName != dto.NewName)
-                {
-                    asset.Name = dto.NewName;
-                    await _context.SaveChangesAsync();
-                    return (true, $"Asset renamed to {asset.Name}");
-                }
+                // Update the asset name
+                asset.Name = dto.NewName;
+                await _context.SaveChangesAsync();
 
-                //Moving to new parent
-                if (dto.OldParentId != dto.NewParentId)
-                {
-                    var newParent = await _context.Assets.FirstOrDefaultAsync(a => a.AssetId == dto.NewParentId);
-                    if (dto.NewParentId != Guid.Empty && newParent == null)
-                        return (false, $"New parent with ID {dto.NewParentId} not found.");
-
-                    // Prevent circular move
-                    if (await IsDescendant(dto.AssetId, dto.NewParentId))
-                        return (false, "Invalid move: cannot move an asset under its own descendant.");
-
-                    asset.ParentId = dto.NewParentId == Guid.Empty ? null : dto.NewParentId;
-                    await _context.SaveChangesAsync();
-                    return (true, $"Asset moved to new parent ID {dto.NewParentId}");
-                }
-
-                return (false, "No changes detected.");
+                return (true, $"Asset renamed to {asset.Name}");
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "Database error updating asset.");
+                return (false, "Database error occurred while updating asset.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating asset");
+                _logger.LogError(ex, "Unexpected error updating asset.");
                 return (false, "Unexpected error occurred while updating asset.");
             }
         }
@@ -235,6 +283,12 @@ namespace Infrastructure.Service
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
+
+                bool ConnectedToDevice = await _context.MappingTable.AnyAsync(a => a.AssetId == assetId);
+
+                if (ConnectedToDevice)
+                    throw new Exception("Unassign the Device to Delete the asset");
+
                 var asset = await _context.Assets
                     .Include(a => a.Childrens.Where(c => !c.IsDeleted))//see only the active children
                     .FirstOrDefaultAsync(a => a.AssetId == assetId);
