@@ -70,5 +70,18 @@ namespace MappingService.Controllers
                 return BadRequest(ex.Message);
             }
         }
+
+        [HttpGet("{assetId}")]
+        public async Task<IActionResult> GetConfigOnAsset(Guid assetId)
+        {
+            try
+            {
+                var mappingonasset = await _mappingService.GetSignalsOnAnAsset(assetId);
+                return Ok(mappingonasset);
+            }catch(Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
     }
 }

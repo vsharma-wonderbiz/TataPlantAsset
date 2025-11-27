@@ -15,5 +15,7 @@ namespace Application.Interface
         Task<List<AssetSignalDeviceMapping>> GetMappings();
 
         Task UnassignDevice(Guid AssetId);
+
+        Task<List<AssetSignalDeviceMapping>> GetSignalsOnAnAsset(Guid assetId);
     }
 }

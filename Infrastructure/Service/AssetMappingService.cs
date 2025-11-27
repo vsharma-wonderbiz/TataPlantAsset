@@ -5,6 +5,7 @@ using MappingService.DTOs;
 using Infrastructure.DBs;
 using Microsoft.EntityFrameworkCore;
 using Application.DTOs;
+using Domain.Entities;
 
 namespace Infrastructure.Services
 {
@@ -104,5 +105,29 @@ namespace Infrastructure.Services
                 throw new Exception($"Error while unassigning device: {ex.Message}", ex);
             }
         }
+
+        public async Task<List<AssetSignalDeviceMapping>> GetSignalsOnAnAsset(Guid assetId)
+        {
+            try
+            {
+                var assetExists = await _db.Assets.AnyAsync(a => a.AssetId == assetId);
+                if (!assetExists)
+                    return new List<AssetSignalDeviceMapping>();
+
+                var mappings = await _db.MappingTable
+                    .Where(m => m.AssetId == assetId)
+                    .ToListAsync();
+
+                if (!mappings.Any())
+                    return new List<AssetSignalDeviceMapping>();  
+
+                return mappings;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error while fetching mapped signals", ex);
+            }
+        }
+
     }
 }
