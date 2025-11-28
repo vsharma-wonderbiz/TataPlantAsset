@@ -24,9 +24,6 @@ namespace TataPlantAsset.Application.Tests.TestData
         public static UpdateAssetDto RenameAsset(Guid assetId, string oldName, string newName) => new UpdateAssetDto
         {
             AssetId = assetId,
-            OldParentId = Guid.Empty,
-            NewParentId = Guid.Empty,
-            OldName = oldName,
             NewName = newName
         };
 
