@@ -1,5 +1,6 @@
 ﻿using Application.DTOs;
 using Application.Interface;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,6 +18,7 @@ namespace Api.Controllers
         }
 
         //adding the configuration means the signals on the asset 
+        [Authorize(Roles = "Admin")]
         [HttpPost]
        public async Task<IActionResult> AddConfiguration([FromBody] AssetConfigurationDto dto)
         {
@@ -59,7 +61,7 @@ namespace Api.Controllers
             }
         }
 
-
+        [Authorize(Roles = "Admin")]
         [HttpPut("{Id}")]
         public async Task<IActionResult> EditSignalsOnAsset(Guid Id,[FromBody] UpdateAssetConfigurationDto Dto)
         {
@@ -74,6 +76,8 @@ namespace Api.Controllers
 
         }
 
+
+        [Authorize(Roles = "Admin")]
         [HttpDelete("{ID}")]
         public async Task<IActionResult> DeleteSignalOnAsset(Guid ID)
         {
