@@ -34,14 +34,11 @@ namespace TataPlantAsset.Application.Tests.Services
             var updateDto = new UpdateAssetDto
             {
                 AssetId = asset.AssetId,
-                OldParentId = asset.ParentId ?? Guid.Empty,
-                NewParentId = asset.ParentId ?? Guid.Empty,
-                OldName = "OriginalName",
                 NewName = "UpdatedName"
             };
 
             // Act
-            var (isUpdated, message) = await service.UpdateAsset(updateDto);
+            var (isUpdated, message) = await service.UpdateAssetName(updateDto);
 
             // Assert
             isUpdated.Should().BeTrue();
