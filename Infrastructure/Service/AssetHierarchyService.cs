@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Net.Mail;
+using System.Threading.Tasks;
 using Application.DTOs;
 using Application.Interface;
 using Domain.Entities;
@@ -24,13 +25,14 @@ namespace Infrastructure.Service
         {
             try
             {
+                //saare non deleted asset 
                 var allAssets = await _context.Assets
-                    .AsNoTracking()
+                    .AsNoTracking()//basically ki track mat karo 
                     .Where(a => !a.IsDeleted)
                     .ToListAsync();
 
 
-
+                //tree banata hai ki prenatid jo asset ki id ke uske children main daal do 
                 var map = allAssets.ToDictionary(a => a.AssetId);
                 foreach (var asset in allAssets)
                 {
@@ -280,7 +282,7 @@ namespace Infrastructure.Service
 
         public async Task<bool> DeleteAsset(Guid assetId)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            using var transaction = await _context.Database.BeginTransactionAsync();//ye transaction start karta hai 
             try
             {
 
@@ -310,12 +312,12 @@ namespace Infrastructure.Service
                 _context.Assets.Update(asset);
                 await _context.SaveChangesAsync();
 
-                await transaction.CommitAsync();
+                await transaction.CommitAsync();//agar sab hogaya toh final commit save 
                 return true;
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
+                await transaction.RollbackAsync();//agar kuch bhi error aya sab chranges fail ho jayenge sab rollback 
                 _logger.LogError(ex, "Error deleting asset");
                 throw;
             }
@@ -326,12 +328,12 @@ namespace Infrastructure.Service
         {
             try
             {
-                // Start with all non-deleted assets
+                
                 var query = _context.Assets
                     .AsNoTracking()
                     .Where(a => !a.IsDeleted);
 
-                // Apply search if searchTerm is not null or empty
+              
                 if (!string.IsNullOrWhiteSpace(searchTerm))
                 {
                     string lowerTerm = searchTerm.ToLower();

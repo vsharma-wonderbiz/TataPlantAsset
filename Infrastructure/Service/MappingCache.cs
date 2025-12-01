@@ -11,9 +11,9 @@ namespace Infrastructure.Service
     public class MappingCache : IMappingCache, IDisposable
     {
         private readonly IDbContextFactory<DBContext> _dbFactory;
-        private readonly TimeSpan _refreshInterval;
+        private readonly TimeSpan _refreshInterval;//cache refresh ka interval
         private readonly CancellationTokenSource _cts = new();
-        private volatile ConcurrentDictionary<(Guid deviceId, Guid devicePortId), MappingInfo> _cache
+        private volatile ConcurrentDictionary<(Guid deviceId, Guid devicePortId), MappingInfo> _cache//actual in memeory cache
             = new();
 
         public MappingCache(IDbContextFactory<DBContext> dbFactory, TimeSpan? refreshInterval = null)
@@ -24,7 +24,7 @@ namespace Infrastructure.Service
         }
 
         public bool TryGet(Guid deviceId, Guid devicePortId, out MappingInfo mapping)
-            => _cache.TryGetValue((deviceId, devicePortId), out mapping);
+            => _cache.TryGetValue((deviceId, devicePortId), out mapping);//read the cache
 
         public async Task RefreshAsync(CancellationToken ct = default)
         {

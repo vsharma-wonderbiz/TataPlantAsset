@@ -6,8 +6,15 @@ using Microsoft.EntityFrameworkCore;
 using Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Api.Extesnion; // ⭐ ADD THIS - Import your extension namespace
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+//--------------------------Serliog-------------------------------
+
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .CreateLogger();
 
 // -------------------- Configuration --------------------
 builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
