@@ -19,7 +19,7 @@ namespace Infrastructure.Service
         public MappingCache(IDbContextFactory<DBContext> dbFactory, TimeSpan? refreshInterval = null)
         {
             _dbFactory = dbFactory ?? throw new ArgumentNullException(nameof(dbFactory));
-            _refreshInterval = refreshInterval ?? TimeSpan.FromSeconds(60);
+            _refreshInterval = refreshInterval ?? TimeSpan.FromSeconds(5);
             _ = Task.Run(() => RefreshLoopAsync(_cts.Token));
         }
 
