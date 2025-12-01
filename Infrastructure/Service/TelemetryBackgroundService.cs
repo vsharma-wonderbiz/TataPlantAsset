@@ -102,6 +102,7 @@ namespace Infrastructure.Service
         private async void OnReceived(object? sender, BasicDeliverEventArgs ea)
         {
             await Task.Yield();
+            //ensures execution continues on thread pool asynchronously (avoids doing heavy work on RabbitMQ client's I/O thread).
 
             try
             {
@@ -169,6 +170,8 @@ namespace Infrastructure.Service
                         cur.MaxValue = Math.Max(cur.MaxValue, dto.Value);
                         return cur;
                     });
+                // agar bucket nahi hai, to  new AggregatedRow-> new bucket create 
+                //  updateValueFactory: -> vahi bucket me aggregated hoga 
 
                 _channel.BasicAck(ea.DeliveryTag, false);
             }

@@ -83,5 +83,23 @@ namespace MappingService.Controllers
                 throw new Exception(ex.Message);
             }
         }
+        [HttpDelete("/deletemap/{mappingId}")]
+        public async Task<IActionResult> DeleteMappingAsync(Guid mappingId)
+        {
+            try
+            {
+                bool deleted = await _mappingService.DeleteMappingAsync(mappingId);
+
+                if (!deleted)
+                    return NotFound(new { message = "Mapping not found." });
+
+                return Ok(new { message = "Mapping deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+
+                return StatusCode(500, new { message = "Internal server error while deleting mapping." });
+            }
+        }
     }
 }

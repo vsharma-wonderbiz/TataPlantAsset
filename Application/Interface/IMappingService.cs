@@ -17,5 +17,6 @@ namespace Application.Interface
         Task UnassignDevice(Guid AssetId);
 
         Task<List<AssetSignalDeviceMapping>> GetSignalsOnAnAsset(Guid assetId);
+        Task<bool> DeleteMappingAsync(Guid mappingId);
     }
 }
