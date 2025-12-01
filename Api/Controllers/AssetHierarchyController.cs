@@ -1,6 +1,7 @@
 ﻿using System.Threading.Tasks;
 using Application.DTOs;
 using Application.Interface;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers
@@ -24,6 +25,7 @@ namespace Api.Controllers
             return Ok(tree);
         }
 
+        [AllowAnonymous]
         [HttpGet("[action]/{parentId?}")]
         public async Task<List<AssetDto>> GetByParentIdAsync(Guid? parentId)
         {
@@ -36,6 +38,7 @@ namespace Api.Controllers
             return assets;
         }
 
+        [Authorize(Roles ="Admin")]
         [HttpPost("[action]")]
         public async Task<IActionResult> InsertAsset([FromBody] InsertionAssetDto asset)
         {
@@ -56,7 +59,7 @@ namespace Api.Controllers
             }
         }
 
-
+        [Authorize(Roles = "Admin")]
         [HttpPut("[action]")]
         public async Task<IActionResult> UpdateAsset([FromBody] UpdateAssetDto dto)
         {
@@ -68,6 +71,7 @@ namespace Api.Controllers
             return BadRequest(message);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpDelete("[action]/{id}")]
         public async Task<IActionResult> DeleteAsset(Guid id)
         {
@@ -92,6 +96,7 @@ namespace Api.Controllers
 
         }
 
+
         [HttpGet("Search")]
         public async Task<IActionResult> SearchAssets([FromQuery] string? term)
         {
@@ -99,6 +104,7 @@ namespace Api.Controllers
             return Ok(results);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpGet("Deleted")]
         public async Task<IActionResult> GetDeletedAssets()
         {
@@ -114,6 +120,7 @@ namespace Api.Controllers
             }
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpPost("Restore/{id}")]
         public async Task<IActionResult> RestoreAsset(Guid id)
         {

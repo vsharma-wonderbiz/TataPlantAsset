@@ -4,6 +4,7 @@ using MappingService.DTOs;
 using MappingService.Domain.Entities;
 using Application.Interface;
 using Application.DTOs;
+using Microsoft.AspNetCore.Authorization;
 
 namespace MappingService.Controllers
 {
@@ -18,6 +19,7 @@ namespace MappingService.Controllers
             _mappingService = mappingService;
         }
 
+        [Authorize(Roles = "Admin")]
         // POST api/mapping
         [HttpPost]
         public async Task<IActionResult> CreateMapping([FromBody] CreateMappingDto dto)
@@ -58,6 +60,8 @@ namespace MappingService.Controllers
             }
         }
 
+
+        [Authorize(Roles = "Admin")]
         [HttpDelete("{AssetId}")]
         public async Task<IActionResult> UnAssignDevicesFromAsset(Guid AssetId)
         {
