@@ -28,7 +28,7 @@ namespace Application.DTOs
         public string SignalType { get; set; }
 
         [JsonPropertyName("Value")]
-        public double Value { get; set; }
+        public float Value { get; set; }
 
         [JsonPropertyName("Unit")]
         public string Unit { get; set; }

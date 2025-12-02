@@ -8,6 +8,7 @@ namespace Application.Interface
 {
     public class MappingInfo
     {
+        public  Guid MappingId { get; set; }
         public Guid AssetId { get; init; }
         public Guid SignalTypeId { get; init; }
         public string SignalName { get; init; }

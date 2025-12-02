@@ -7,6 +7,8 @@ using Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Api.Extesnion; // ⭐ ADD THIS - Import your extension namespace
 using Serilog;
+using Infrastructure.Configuration;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,10 +51,19 @@ builder.Services.AddCors(options =>
 });
 
 // -------------------- Scoped Services --------------------
+builder.Services.Configure<InfluxDbOptions>(configuration.GetSection("InfluxDb"));
+builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
+
+
+builder.Services.AddSingleton<IInfluxDbConnectionService, InfluxDbConnectionService>();
+builder.Services.AddScoped<IInfluxTelementryService, InfluxTelemetryService>();
+
+
 builder.Services.AddScoped<IAssetHierarchyService, AssetHierarchyService>();
 builder.Services.AddScoped<IAssetConfiguration, AssetConfigurationService>();
 builder.Services.AddScoped<IMappingService, AssetMappingService>();
 builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
+
 
 // -------------------- Singleton / Cache --------------------
 builder.Services.AddSingleton<IMappingCache>(sp =>
@@ -62,6 +73,7 @@ builder.Services.AddSingleton<IMappingCache>(sp =>
 });
 
 // -------------------- Background Services --------------------
+builder.Services.AddHostedService<InfluxDbInitializationService>();
 builder.Services.AddHostedService<TelemetryBackgroundService>();
 
 // -------------------- Build App --------------------

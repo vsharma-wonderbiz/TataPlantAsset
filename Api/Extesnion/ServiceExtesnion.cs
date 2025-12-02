@@ -7,6 +7,8 @@ namespace Api.Extesnion
 {
     public static class ServiceExtesnion
     {
+
+
         public static IServiceCollection AddCustomAuthentication(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddAuthentication(options =>

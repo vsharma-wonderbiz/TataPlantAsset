@@ -32,6 +32,7 @@ namespace Infrastructure.Service
             var rows = await db.MappingTable.AsNoTracking()
                 .Select(m => new
                 {
+                    m.MappingId,
                     m.DeviceId,
                     m.DevicePortId,
                     m.AssetId,
@@ -47,6 +48,7 @@ namespace Infrastructure.Service
             {
                 newCache[(r.DeviceId, r.DevicePortId)] = new MappingInfo
                 {
+                    MappingId=r.MappingId,
                     AssetId = r.AssetId,
                     SignalTypeId = r.SignalTypeId,
                     SignalName = r.SignalName,

@@ -87,7 +87,7 @@ namespace MappingService.Controllers
                 throw new Exception(ex.Message);
             }
         }
-        [HttpDelete("/deletemap/{mappingId}")]
+        [HttpDelete("/api/deletemap/{mappingId}")]
         public async Task<IActionResult> DeleteMappingAsync(Guid mappingId)
         {
             try
