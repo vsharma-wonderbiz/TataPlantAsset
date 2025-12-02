@@ -29,6 +29,7 @@ namespace Infrastructure.Services
             // normalize requested lists
             var requestedSignalIds = dto.Registers.Select(r => r.SignalTypeId).Distinct().ToList();
             var requestedRegisterAddresses = dto.Registers.Select(r => r.RegisterAddress).ToList();
+            var requestedRegisterIds = dto.Registers.Select(r => r.registerId).ToList();
 
             // Start a transaction to ensure atomicity
             await using var tx = await _db.Database.BeginTransactionAsync();
@@ -91,6 +92,7 @@ namespace Infrastructure.Services
                         DeviceId = dto.DeviceId,
                         DevicePortId = dto.DevicePortId,
                         RegisterAdress = reg.RegisterAddress,
+                        registerId = reg.registerId,
                         SignalName = signal.SignalName,
                         SignalUnit = signal.SignalUnit,
                         CreatedAt = DateTime.UtcNow

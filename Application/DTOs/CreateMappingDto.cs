@@ -21,6 +21,7 @@ namespace Application.DTOs
 
         // The signal type id selected in frontend
         public Guid SignalTypeId { get; set; }
+        public Guid registerId { get; set; }
     }
 
 

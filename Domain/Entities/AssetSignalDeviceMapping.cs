@@ -28,6 +28,7 @@ namespace MappingService.Domain.Entities
         public string SignalName { get; set; }
 
         public int RegisterAdress { get; set; } 
+        public Guid registerId { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
