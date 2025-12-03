@@ -1,273 +1,15 @@
-﻿//using Application.DTOs;
-//using Application.Interface;
-//using Domain.Entities;
-//using Infrastructure.DBs;
-//using Microsoft.Extensions.Hosting;
-//using Microsoft.Extensions.Logging;
-//using Microsoft.Extensions.Options;
-//using RabbitMQ.Client;
-//using RabbitMQ.Client.Events;
-//using System;
-//using System.Collections.Concurrent;
-//using System.Collections.Generic;
-//using System.Linq;
-//using System.Text;
-//using System.Text.Json;
-//using System.Threading;
-//using System.Threading.Tasks;
-
-//namespace Infrastructure.Service
-//{
-//    public class TelemetryOptions
-//    {
-//        public string RabbitHost { get; set; } = "localhost";
-//        public string RabbitUser { get; set; } = "guest";
-//        public string RabbitPass { get; set; } = "guest";
-//        public string Queue { get; set; } = "telemetry_queue";
-//        public ushort Prefetch { get; set; } = 200;
-//        public int BucketSeconds { get; set; } = 60;
-//        public int FlushIntervalMs { get; set; } = 5000;
-//        public int MaxHistoryBuckets { get; set; } = 100; // for graphing
-//    }
-
-//    public class AggregatedRow
-//    {
-//        public Guid AssetId { get; set; }
-//        public Guid SignalTypeId { get; set; }
-//        public Guid DeviceId { get; set; }
-//        public Guid DevicePortId { get; set; }
-//        public string SignalName { get; set; }
-//        public string SignalUnit { get; set; }
-//        public int? RegisterAddress { get; set; }
-//        public DateTime BucketStartUtc { get; set; }
-//        public int Count { get; set; }
-//        public double Sum { get; set; }
-//        public double MinValue { get; set; }
-//        public double MaxValue { get; set; }
-//        public double Avg => Count > 0 ? Sum / Count : 0;
-//    }
-
-//    public class TelemetryBackgroundService : BackgroundService
-//    {
-//        private readonly ILogger<TelemetryBackgroundService> _logger;
-//        private readonly IMappingCache _mappingCache;
-//        private readonly TelemetryOptions _options;
-
-//        private IConnection _connection;
-//        private IModel _channel;
-//        private EventingBasicConsumer _consumer;
-
-//        // Aggregates per bucket/signal/register/device/port/asset
-//        private ConcurrentDictionary<(long BucketTicks, Guid AssetId, Guid DeviceId, Guid PortId, int? Register, Guid SignalTypeId), AggregatedRow> _aggregates
-//            = new();
-
-//        // Rolling history per signal/register for graphing
-//        private readonly ConcurrentDictionary<(Guid AssetId, Guid DeviceId, Guid PortId, int? Register, Guid SignalTypeId), LinkedList<AggregatedRow>> _history
-//            = new();
-
-//        private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
-
-//        public TelemetryBackgroundService(
-//            ILogger<TelemetryBackgroundService> logger,
-//            IMappingCache mappingCache,
-//            IOptions<TelemetryOptions> options)
-//        {
-//            _logger = logger;
-//            _mappingCache = mappingCache;
-//            _options = options.Value;
-//        }
-
-//        public override Task StartAsync(CancellationToken cancellationToken)
-//        {
-//            var factory = new ConnectionFactory
-//            {
-//                HostName = _options.RabbitHost,
-//                UserName = _options.RabbitUser,
-//                Password = _options.RabbitPass,
-//                AutomaticRecoveryEnabled = true
-//            };
-
-//            _connection = factory.CreateConnection();
-//            _channel = _connection.CreateModel();
-//            _channel.BasicQos(0, _options.Prefetch, false);
-
-//            _consumer = new EventingBasicConsumer(_channel);
-//            _consumer.Received += OnReceived;
-//            _channel.BasicConsume(queue: _options.Queue, autoAck: false, consumer: _consumer);
-
-//            _logger.LogInformation("TelemetryBackgroundService started consuming queue {Queue}", _options.Queue);
-//            return base.StartAsync(cancellationToken);
-//        }
-
-//        private async void OnReceived(object? sender, BasicDeliverEventArgs ea)
-//        {
-//            await Task.Yield();
-//            //ensures execution continues on thread pool asynchronously (avoids doing heavy work on RabbitMQ client's I/O thread).
-
-//            try
-//            {
-//                var body = ea.Body.ToArray();
-//                TelemetryDto dto;
-//                try
-//                {
-//                    dto = JsonSerializer.Deserialize<TelemetryDto>(body, _jsonOptions);
-//                }
-//                catch (Exception ex)
-//                {
-//                    _logger.LogWarning(ex, "Failed to deserialize telemetry message; acking to drop");
-//                    _channel.BasicAck(ea.DeliveryTag, false);
-//                    return;
-//                }
-
-//                if (dto == null)
-//                {
-//                    _channel.BasicAck(ea.DeliveryTag, false);
-//                    return;
-//                }
-
-//                if (!_mappingCache.TryGet(dto.DeviceId, dto.deviceSlaveId, out var mapping))
-//                {
-//                    _logger.LogDebug("Telemetry unmapped for Device:{Device} Port:{Port}", dto.DeviceId, dto.deviceSlaveId);
-//                    _channel.BasicAck(ea.DeliveryTag, false);
-//                    return;
-//                }
-
-//                // Align timestamp to bucket
-//                var bucketStart = AlignToBucket(dto.TimestampUtc, TimeSpan.FromSeconds(_options.BucketSeconds));
-
-//                // Key uniquely identifies each signal/register/port/device/asset/bucket
-//                var key = (
-//                    BucketTicks: bucketStart.Ticks,
-//                    AssetId: mapping.AssetId,
-//                    DeviceId: dto.DeviceId,
-//                    PortId: dto.deviceSlaveId,
-//                    Register: dto.RegisterAddress,
-//                    SignalTypeId: mapping.SignalTypeId
-//                );
-
-//                _aggregates.AddOrUpdate(
-//                    key,
-//                    addValueFactory: k => new AggregatedRow
-//                    {
-//                        AssetId = mapping.AssetId,
-//                        SignalTypeId = mapping.SignalTypeId,
-//                        DeviceId = dto.DeviceId,
-//                        DevicePortId = dto.deviceSlaveId,
-//                        SignalName = mapping.SignalName,
-//                        SignalUnit = dto.Unit ?? mapping.SignalUnit,
-//                        RegisterAddress = dto.RegisterAddress,
-//                        BucketStartUtc = bucketStart,
-//                        Count = 1,
-//                        Sum = dto.Value,
-//                        MinValue = dto.Value,
-//                        MaxValue = dto.Value
-//                    },
-//                    updateValueFactory: (_, cur) =>
-//                    {
-//                        cur.Count += 1;
-//                        cur.Sum += dto.Value;
-//                        cur.MinValue = Math.Min(cur.MinValue, dto.Value);
-//                        cur.MaxValue = Math.Max(cur.MaxValue, dto.Value);
-//                        return cur;
-//                    });
-//                // agar bucket nahi hai, to  new AggregatedRow-> new bucket create 
-//                //  updateValueFactory: -> vahi bucket me aggregated hoga 
-
-//                _channel.BasicAck(ea.DeliveryTag, false);
-//            }
-//            catch (Exception ex)
-//            {
-//                _logger.LogError(ex, "Error processing telemetry message; acking to avoid poison queue");
-//                try { _channel.BasicAck(ea.DeliveryTag, false); } catch { }
-//            }
-//        }
-
-//        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-//        {
-//            while (!stoppingToken.IsCancellationRequested)
-//            {
-//                try
-//                {
-//                    await Task.Delay(_options.FlushIntervalMs, stoppingToken);
-
-//                    var snapshot = Interlocked.Exchange(
-//                        ref _aggregates,
-//                        new ConcurrentDictionary<(long, Guid, Guid, Guid, int?, Guid), AggregatedRow>()
-//                    );
-
-//                    if (snapshot == null || snapshot.Count == 0)
-//                        continue;
-
-//                    var rows = snapshot.Values.ToList();
-
-//                    foreach (var row in rows)
-//                    {
-//                        // Store rolling history for plotting
-//                        var histKey = (row.AssetId, row.DeviceId, row.DevicePortId, row.RegisterAddress, row.SignalTypeId);
-//                        var list = _history.GetOrAdd(histKey, _ => new LinkedList<AggregatedRow>());
-//                        list.AddLast(row);
-//                        while (list.Count > _options.MaxHistoryBuckets)
-//                            list.RemoveFirst();
-
-//                        // Output for debugging / logging
-//                        Console.WriteLine(
-//                            $"AssetId:       {row.AssetId}\n" +
-//                            $"SignalTypeId:  {row.SignalTypeId}\n" +
-//                            $"DeviceId:      {row.DeviceId}\n" +
-//                            $"DevicePortId:  {row.DevicePortId}\n" +
-//                            $"Signal:        {row.SignalName} ({row.SignalUnit})\n" +
-//                            $"Register:      {row.RegisterAddress}\n" +
-//                            $"Bucket:        {row.BucketStartUtc}\n" +
-//                            $"Count:         {row.Count}\n" +
-//                            $"Sum:           {row.Sum}\n" +
-//                            $"Min:           {row.MinValue}\n" +
-//                            $"Max:           {row.MaxValue}\n" +
-//                            $"Avg:           {row.Avg}\n" +
-//                            $"--------------------------------------------"
-//                        );
-//                    }
-//                }
-//                catch (OperationCanceledException) { break; }
-//                catch (Exception ex)
-//                {
-//                    _logger.LogError(ex, "FlusherLoop error - incoming aggregates may be lost");
-//                }
-//            }
-//        }
-
-//        public override Task StopAsync(CancellationToken cancellationToken)
-//        {
-//            try { _channel?.Close(); _channel?.Dispose(); } catch { }
-//            try { _connection?.Close(); _connection?.Dispose(); } catch { }
-//            return base.StopAsync(cancellationToken);
-//        }
-
-//        private static DateTime AlignToBucket(DateTime utc, TimeSpan bucket)
-//        {
-//            var ticks = utc.Ticks - (utc.Ticks % bucket.Ticks);
-//            return new DateTime(ticks, DateTimeKind.Utc);
-//        }
-
-//        // Optional helper to get rolling history for plotting
-//        public IReadOnlyList<AggregatedRow> GetHistory(Guid assetId, Guid deviceId, Guid portId, int? register, Guid signalTypeId)
-//        {
-//            var key = (assetId, deviceId, portId, register, signalTypeId);
-//            if (_history.TryGetValue(key, out var list))
-//                return list.ToList();
-//            return Array.Empty<AggregatedRow>();
-//        }
-//    }
-//}
-using Application.DTOs;
+﻿using Application.DTOs;
 using Application.Interface;
+using Infrastructure.DBs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System;
-using System.Text;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -288,32 +30,67 @@ namespace Infrastructure.Service
         private readonly ILogger<TelemetryBackgroundService> _logger;
         private readonly IMappingCache _mappingCache;
         private readonly TelemetryOptions _options;
-       
-        private readonly IServiceProvider _serviceprovider;
+        private readonly IServiceProvider _serviceProvider;
 
         private IConnection _connection;
         private IModel _channel;
         private EventingBasicConsumer _consumer;
         private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+        private readonly IAlertStateStore _alertStore;
 
         public TelemetryBackgroundService(
             ILogger<TelemetryBackgroundService> logger,
             IMappingCache mappingCache,
             IOptions<TelemetryOptions> options,
-            IServiceProvider serviceprovider)
+            IServiceProvider serviceProvider,
+            IAlertStateStore alertStore)
         {
             _logger = logger;
             _mappingCache = mappingCache;
             _options = options.Value;
-            
-            _serviceprovider = serviceprovider;
+            _serviceProvider = serviceProvider;
+            _alertStore = alertStore;
         }
+
+        private object BuildNotificationPayload(
+            string assetName, string signalName, double value, double min, double max)
+        {
+            string statusType;
+            double percent;
+
+            if (value < min)
+            {
+                percent = ((min - value) / min) * 100;
+                statusType = "LOW";
+            }
+            else if (value > max)
+            {
+                percent = ((value - max) / max) * 100;
+                statusType = "HIGH";
+            }
+            else
+            {
+                return null;
+            }
+
+            return new
+            {
+                asset = assetName,
+                signal = signalName,
+                value = value,
+                min = min,
+                max = max,
+                status = statusType,
+                percent = Math.Round(percent, 1),
+                timestamp = DateTime.UtcNow.ToString("o")  // ISO format
+            };
+        }
+
 
         public override async Task StartAsync(CancellationToken cancellationToken)
         {
-
             _logger.LogInformation("Waiting for InfluxDB to initialize...");
-             await Task.Delay(3000, cancellationToken);
+            await Task.Delay(3000, cancellationToken);
 
             var factory = new ConnectionFactory
             {
@@ -328,30 +105,26 @@ namespace Infrastructure.Service
             _channel.BasicQos(0, _options.Prefetch, false);
 
             _consumer = new EventingBasicConsumer(_channel);
-            _consumer.Received += OnReceived;
+            _consumer.Received += async (sender, ea) => await OnReceivedAsync(ea);
             _channel.BasicConsume(queue: _options.Queue, autoAck: false, consumer: _consumer);
 
             _logger.LogInformation("TelemetryBackgroundService started consuming queue {Queue}", _options.Queue);
             await base.StartAsync(cancellationToken);
         }
 
-        private async void OnReceived(object? sender, BasicDeliverEventArgs ea)
+        private async Task OnReceivedAsync(BasicDeliverEventArgs ea)
         {
-            await Task.Yield(); // run asynchronously
+            await Task.Yield(); // ensure async context
 
             try
             {
                 var body = ea.Body.ToArray();
-
-                //var jsonString = Encoding.UTF8.GetString(body);
-                //Console.WriteLine("RAW JSON RECEIVED: " + jsonString);
-
                 TelemetryDto dto;
 
                 try
                 {
                     dto = JsonSerializer.Deserialize<TelemetryDto>(body, _jsonOptions);
-                    Console.WriteLine("DTO OBJECT: " + JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true }));
+                    if (dto == null) throw new Exception("Telemetry DTO is null.");
                 }
                 catch (Exception ex)
                 {
@@ -360,13 +133,6 @@ namespace Infrastructure.Service
                     return;
                 }
 
-                if (dto == null)
-                {
-                    _channel.BasicAck(ea.DeliveryTag, false);
-                    return;
-                }
-
-                //sirf mapper table ke entroes ka value
                 if (!_mappingCache.TryGet(dto.DeviceId, dto.deviceSlaveId, out var mapping))
                 {
                     _logger.LogDebug("Telemetry unmapped for Device:{Device} Port:{Port}", dto.DeviceId, dto.deviceSlaveId);
@@ -374,7 +140,6 @@ namespace Infrastructure.Service
                     return;
                 }
 
-                // Build DTO for InfluxDB
                 var influxDto = new InfluxTelementryDto
                 {
                     AssetId = mapping.AssetId,
@@ -383,23 +148,106 @@ namespace Infrastructure.Service
                     SignalTypeId = mapping.SignalTypeId,
                     MappingId = mapping.MappingId,
                     RegisterAddress = dto.RegisterAddress,
-                    SignalType=mapping.SignalName,
+                    SignalType = mapping.SignalName,
                     Value = dto.Value,
                     Unit = dto.Unit,
                     Timestamp = dto.TimestampUtc
                 };
 
-                // Write to InfluxDB
-                using (var scope = _serviceprovider.CreateScope())
+                using var scope = _serviceProvider.CreateScope();
+                var influxService = scope.ServiceProvider.GetRequiredService<IInfluxTelementryService>();
+                await influxService.WriteTelemetryAsync(influxDto);
+
+                var assetService = scope.ServiceProvider.GetRequiredService<IAssetHierarchyService>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+                // Get asset name
+                var assetName = await assetService.GetAssetNameAsync(mapping.AssetId) ?? "Unknown Asset";
+
+                //Console.WriteLine(mapping.SignalTypeId);
+                // Get signal thresholds
+                var signal = await assetService.GetSignalTypeAsync(mapping.SignalTypeId);
+              
+                if (signal != null && influxDto.SignalTypeId == signal.SignalTypeID && influxDto.RegisterAddress == signal.DefaultRegisterAdress )
                 {
-                    var TelementryService = scope.ServiceProvider.GetRequiredService<IInfluxTelementryService>();
+                    // after you already have `signal` and `influxDto`:
+                    var now = DateTime.UtcNow;
+                    var mappingKey = mapping.MappingId; // use MappingId as unique key
 
-                    await TelementryService.WriteTelemetryAsync(influxDto);
+                    bool isOutOfRange = influxDto.Value < signal.MinThreshold || influxDto.Value > signal.MaxThreshold;
+
+                    if (isOutOfRange)
+                    {
+                        // check if there is already an active alert
+                        var current = await _alertStore.GetAsync(mappingKey);
+                        if (current == null || !current.IsActive)
+                        {
+                            // start alert
+                            await _alertStore.SetActiveAsync(mappingKey, now, influxDto.Value);
+
+                            var startPayload = BuildNotificationPayload(
+                                assetName,
+                                signal.SignalName,
+                                influxDto.Value,
+                                signal.MinThreshold,
+                                signal.MaxThreshold
+                            );
+
+                            var notificationRequest = new NotificationCreateRequest(
+                                Title: $"Alert START: {signal.SignalName} exceeded",
+                                Text: JsonSerializer.Serialize(startPayload),
+                                ExpiresAt: null,
+                                Priority: 0
+                            );
+
+                            await notificationService.CreateForUsersAsync(notificationRequest);
+                            _logger.LogInformation("Sent START notification for {Asset} {Signal}", assetName, signal.SignalName);
+                        }
+                        else
+                        {
+                            // already active — update stats only
+                            await _alertStore.UpdateActiveAsync(mappingKey, influxDto.Value, now);
+                            // optionally log/debug
+                        }
+                    }
+                    else
+                    {
+                        // value back to normal — if active then clear and send resolved notification
+                        var active = await _alertStore.GetAsync(mappingKey);
+                        if (active != null && active.IsActive)
+                        {
+                            var saved = await _alertStore.ClearActiveAsync(mappingKey, now);
+
+                            if (saved != null)
+                            {
+                                var duration = now - saved.StartUtc;
+                                var resolvedPayload = new
+                                {
+                                    asset = assetName,
+                                    signal = signal.SignalName,
+                                    from = saved.StartUtc.ToString("o"),
+                                    to = now.ToString("o"),
+                                    durationSeconds = (int)duration.TotalSeconds,
+                                    min = saved.MinValue,
+                                    max = saved.MaxValue
+                                };
+
+                                var notificationRequest = new NotificationCreateRequest(
+                                    Title: $"Alert RESOLVED: {signal.SignalName} normalised",
+                                    Text: JsonSerializer.Serialize(resolvedPayload),
+                                    ExpiresAt: null,
+                                    Priority: 0
+                                );
+
+                                await notificationService.CreateForUsersAsync(notificationRequest);
+                                _logger.LogInformation("Sent RESOLVED notification for {Asset} {Signal}", assetName, signal.SignalName);
+                            }
+                        }
+                    }
+
                 }
-                //await _influxTelemetryService.WriteTelemetryAsync(influxDto);
-                _logger.LogInformation("Telemetry written to InfluxDB for Device:{Device} Signal:{Signal}", dto.DeviceId, mapping.SignalName);
 
-                // Ack the message
+                //_logger.LogInformation("Telemetry written to InfluxDB for Device:{Device} Signal:{Signal}", dto.DeviceId, mapping.SignalName);
                 _channel.BasicAck(ea.DeliveryTag, false);
             }
             catch (Exception ex)
@@ -417,10 +265,6 @@ namespace Infrastructure.Service
             return base.StopAsync(cancellationToken);
         }
 
-        protected override Task ExecuteAsync(CancellationToken stoppingToken)
-        {
-            // No aggregation loop needed now, can be used for monitoring/logging if required
-            return Task.CompletedTask;
-        }
+        protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
     }
 }

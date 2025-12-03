@@ -15,6 +15,8 @@ namespace Infrastructure.DBs
         public DbSet<Asset> Assets { get; set; }
         public DbSet<SignalTypes> SignalTypes { get; set; }
         public DbSet<AssetConfiguration> AssetConfigurations { get; set; }
+        public DbSet<Notification> Notifications { get; set; } = null!;
+        public DbSet<NotificationRecipient> NotificationRecipients { get; set; } = null!;
 
         // Mapping table you already provided
         // Keep property name if other parts of your code expect `MappingTable`
@@ -85,6 +87,28 @@ namespace Infrastructure.DBs
                 // Optional: define AvgValue as computed column in the database via migration if you want.
                 // Example (SQL Server): ALTER TABLE ... ADD AvgValue AS (CASE WHEN Count>0 THEN Sum/Count ELSE NULL END) PERSISTED
                 // EF Core migration must be edited to include the appropriate SQL for computed column.
+            });
+
+
+            modelBuilder.Entity<Notification>(b =>
+            {
+                b.HasKey(n => n.Id);
+                b.Property(n => n.Title).HasMaxLength(250).IsRequired();
+                b.Property(n => n.Text).IsRequired();
+                b.Property(n => n.CreatedAt).IsRequired();
+                b.Property(n => n.ExpiresAt).IsRequired();
+                b.HasMany(n => n.Recipients)
+                 .WithOne(r => r.Notification)
+                 .HasForeignKey(r => r.NotificationId)
+                 .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<NotificationRecipient>(b =>
+            {
+                b.HasKey(r => r.Id);
+                b.Property(r => r.UserId).HasMaxLength(200).IsRequired();
+                b.Property(r => r.CreatedAt).IsRequired();
+                b.HasIndex(r => new { r.UserId, r.CreatedAt });
             });
         }
     }

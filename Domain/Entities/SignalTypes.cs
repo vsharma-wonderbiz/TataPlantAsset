@@ -21,6 +21,9 @@ namespace Domain.Entities
 
         public int DefaultRegisterAdress {  get; set; }
 
+        public double MinThreshold { get; set; }
+        public double MaxThreshold { get; set; }
+
         public ICollection<AssetConfiguration> AssetConfigurations { get; set; } = new List<AssetConfiguration>();
     }
 }

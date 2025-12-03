@@ -1,5 +1,6 @@
 ﻿using Application.DTOs;
 using Domain.Entities;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Application.Interface
 {
@@ -17,7 +18,8 @@ namespace Application.Interface
         Task<List<AssetDto>> GetDeletedAssetsAsync();
 
         Task<bool> RestoreAssetAsync(Guid assetId);
-
+        Task<string?> GetAssetNameAsync(Guid assetId);
+        Task<SignalTypes?> GetSignalTypeAsync(Guid signalTypeId);
 
     }
 }

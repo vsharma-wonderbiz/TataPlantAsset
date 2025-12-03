@@ -52,8 +52,8 @@ namespace Infrastructure.Service
                 // Write point asynchronously
                 await writeApi.WritePointAsync(point, _bucket, _org);
 
-                Log.Information("Telemetry written successfully | Asset:{AssetId} | Signal:{SignalTypeId} | Value:{Value}",
-                    dto.AssetId, dto.SignalTypeId, dto.Value);
+                //Log.Information("Telemetry written successfully | Asset:{AssetId} | Signal:{SignalTypeId} | Value:{Value}",
+                //    dto.AssetId, dto.SignalTypeId, dto.Value);
             }
             catch (Exception ex)
             {
