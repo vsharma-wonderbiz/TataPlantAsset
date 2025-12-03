@@ -12,6 +12,7 @@ namespace Application.Interface
     public interface IInfluxTelementryService
     {
         Task WriteTelemetryAsync(InfluxTelementryDto Dto);
-        //Task<TelemetryData> ReadLatestAsync(string assetId, string signalId);
+        Task<TelemetryResponseDto> GetTelemetrySeriesAsync(Guid assetId, Guid signalTypeId, string startTime);
+        Task<TelemetryResponseDto> GetTelemetrySeriesAsync(TelemetryRequestDto request);
     }
 }
