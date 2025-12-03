@@ -13,7 +13,7 @@ namespace Infrastructure.Service
         private readonly IDbContextFactory<DBContext> _dbFactory;
         private readonly TimeSpan _refreshInterval;//cache refresh ka interval
         private readonly CancellationTokenSource _cts = new();
-        private volatile ConcurrentDictionary<(Guid deviceId, Guid devicePortId), MappingInfo> _cache//actual in memeory cache
+        private volatile ConcurrentDictionary<(Guid deviceId, Guid devicePortId ,int RegisterAdress), MappingInfo> _cache//actual in memeory cache
             = new();
 
         public MappingCache(IDbContextFactory<DBContext> dbFactory, TimeSpan? refreshInterval = null)
@@ -23,8 +23,8 @@ namespace Infrastructure.Service
             _ = Task.Run(() => RefreshLoopAsync(_cts.Token));
         }
 
-        public bool TryGet(Guid deviceId, Guid devicePortId, out MappingInfo mapping)
-            => _cache.TryGetValue((deviceId, devicePortId), out mapping);//read the cache
+        public bool TryGet(Guid deviceId, Guid devicePortId,int RegisterAdress, out MappingInfo mapping)
+            => _cache.TryGetValue((deviceId, devicePortId, RegisterAdress), out mapping);//read the cache
 
         public async Task RefreshAsync(CancellationToken ct = default)
         {
@@ -43,16 +43,18 @@ namespace Infrastructure.Service
                 })
                 .ToListAsync(ct);
 
-            var newCache = new ConcurrentDictionary<(Guid, Guid), MappingInfo>();
+            var newCache = new ConcurrentDictionary<(Guid, Guid, int), MappingInfo>();
             foreach (var r in rows)
             {
-                newCache[(r.DeviceId, r.DevicePortId)] = new MappingInfo
+                newCache[(r.DeviceId, r.DevicePortId,r.RegisterAddress)] = new MappingInfo
                 {
                     MappingId=r.MappingId,
                     AssetId = r.AssetId,
                     SignalTypeId = r.SignalTypeId,
                     SignalName = r.SignalName,
                     SignalUnit = r.SignalUnit,
+                    DeviceId=r.DeviceId,
+                    DeviceSlaveID=r.DevicePortId,
                     RegisterAddress = r.RegisterAddress
                 };
             }

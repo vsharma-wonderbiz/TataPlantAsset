@@ -2,6 +2,8 @@
 using InfluxDB.Client;
 using Infrastructure.DBs;
 using Application.Interface;
+using Application.DTOs;
+using Application.Enums;
 
 namespace WebAPI.Controllers
 {
@@ -10,10 +12,12 @@ namespace WebAPI.Controllers
     public class TelemetryTestController : ControllerBase
     {
         private readonly IInfluxDbConnectionService _connectionService;
+        private readonly IInfluxTelementryService _TelementryService;
 
-        public TelemetryTestController(IInfluxDbConnectionService connectionService)
+        public TelemetryTestController(IInfluxDbConnectionService connectionService, IInfluxTelementryService telementryService)
         {
             _connectionService = connectionService;
+            _TelementryService = telementryService;
         }
 
         [HttpGet("health")]
@@ -40,6 +44,120 @@ namespace WebAPI.Controllers
                     status = "Failed",
                     message = ex.Message
                 });
+            }
+        }
+
+        [HttpGet("{assetId}/{signalTypeId}")]
+        public async Task<IActionResult> GetTelemetrySeries(
+            Guid assetId,
+            Guid signalTypeId,
+            [FromQuery] string startTime)
+        {
+            if (string.IsNullOrEmpty(startTime))
+                return BadRequest("Start time is required");
+
+            try
+            {
+
+                var result = await _TelementryService.GetTelemetrySeriesAsync(assetId, signalTypeId, startTime);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error retrieving telemetry: {ex.Message}");
+            }
+        }
+
+
+
+
+        [HttpPost("query")]
+        public async Task<IActionResult> GetTelemetry([FromBody] TelemetryRequestDto request)
+        {
+            try
+            {
+                var result = await _TelementryService.GetTelemetrySeriesAsync(request);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+
+        [HttpGet("last-hour")]
+        public async Task<IActionResult> GetLastHour(
+           [FromQuery] Guid assetId,
+           [FromQuery] Guid signalTypeId)
+        {
+            return await GetTelemetry(new TelemetryRequestDto
+            {
+                AssetId = assetId,
+                SignalTypeId = signalTypeId,
+                TimeRange = TimeRange.LastHour
+            });
+        }
+
+        [HttpGet("last-24-hours")]
+        public async Task<IActionResult> GetLast24Hours(
+            [FromQuery] Guid assetId,
+            [FromQuery] Guid signalTypeId)
+        {
+            return await GetTelemetry(new TelemetryRequestDto
+            {
+                AssetId = assetId,
+                SignalTypeId = signalTypeId,
+                TimeRange = TimeRange.Last24Hours
+            });
+        }
+
+        [HttpGet("last-7-days")]
+        public async Task<IActionResult> GetLast7Days(
+            [FromQuery] Guid assetId,
+            [FromQuery] Guid signalTypeId)
+        {
+            return await GetTelemetry(new TelemetryRequestDto
+            {
+                AssetId = assetId,
+                SignalTypeId = signalTypeId,
+                TimeRange = TimeRange.Last7Days
+            });
+        }
+
+        [HttpGet("custom-range")]
+        public async Task<IActionResult> GetCustomRange(
+            [FromQuery] Guid assetId,
+            [FromQuery] Guid signalTypeId,
+            [FromQuery] DateTime startDate,
+            [FromQuery] DateTime? endDate = null)
+        {
+            return await GetTelemetry(new TelemetryRequestDto
+            {
+                AssetId = assetId,
+                SignalTypeId = signalTypeId,
+                TimeRange = TimeRange.Custom,
+                StartDate = startDate,
+                EndDate = endDate
+            });
+        }
+
+        // 🔥 BACKWARD COMPATIBLE: Old endpoint
+        [HttpGet]
+        [Obsolete("Use POST /api/telemetry/query instead")]
+        public async Task<IActionResult> GetTelemetryLegacy(
+            [FromQuery] Guid assetId,
+            [FromQuery] Guid signalTypeId,
+            [FromQuery] string startTime = "-1h")
+        {
+            try
+            {
+                var result = await _TelementryService.GetTelemetrySeriesAsync(assetId, signalTypeId, startTime);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
             }
         }
     }

@@ -5,11 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System;
-using System.Collections.Generic;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,11 +44,11 @@ namespace Infrastructure.Service
             IServiceProvider serviceProvider,
             IAlertStateStore alertStore)
         {
-            _logger = logger;
-            _mappingCache = mappingCache;
-            _options = options.Value;
-            _serviceProvider = serviceProvider;
-            _alertStore = alertStore;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _mappingCache = mappingCache ?? throw new ArgumentNullException(nameof(mappingCache));
+            _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _alertStore = alertStore ?? throw new ArgumentNullException(nameof(alertStore));
         }
 
         private object BuildNotificationPayload(
@@ -60,12 +59,12 @@ namespace Infrastructure.Service
 
             if (value < min)
             {
-                percent = ((min - value) / min) * 100;
+                percent = ((min - value) / (min == 0 ? 1 : min)) * 100;
                 statusType = "LOW";
             }
             else if (value > max)
             {
-                percent = ((value - max) / max) * 100;
+                percent = ((value - max) / (max == 0 ? 1 : max)) * 100;
                 statusType = "HIGH";
             }
             else
@@ -86,10 +85,10 @@ namespace Infrastructure.Service
             };
         }
 
-
         public override async Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Waiting for InfluxDB to initialize...");
+            _logger.LogInformation("TelemetryBackgroundService waiting for InfluxDB to initialize...");
+            // small startup delay to allow dependent services to come up
             await Task.Delay(3000, cancellationToken);
 
             var factory = new ConnectionFactory
@@ -105,6 +104,7 @@ namespace Infrastructure.Service
             _channel.BasicQos(0, _options.Prefetch, false);
 
             _consumer = new EventingBasicConsumer(_channel);
+            // wire up the async consumer handler
             _consumer.Received += async (sender, ea) => await OnReceivedAsync(ea);
             _channel.BasicConsume(queue: _options.Queue, autoAck: false, consumer: _consumer);
 
@@ -114,32 +114,64 @@ namespace Infrastructure.Service
 
         private async Task OnReceivedAsync(BasicDeliverEventArgs ea)
         {
-            await Task.Yield(); // ensure async context
+            await Task.Yield(); // ensure we don't block Rabbit thread
 
             try
             {
                 var body = ea.Body.ToArray();
-                TelemetryDto dto;
 
+                TelemetryDto dto;
                 try
                 {
+                    // Try to deserialize directly from bytes (works on modern System.Text.Json)
                     dto = JsonSerializer.Deserialize<TelemetryDto>(body, _jsonOptions);
-                    if (dto == null) throw new Exception("Telemetry DTO is null.");
+                    if (dto == null) throw new Exception("Telemetry DTO deserialized to null.");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to deserialize telemetry message; acking to drop");
-                    _channel.BasicAck(ea.DeliveryTag, false);
-                    return;
+                    // fallback: try string-deserialize for robustness
+                    try
+                    {
+                        var jsonString = Encoding.UTF8.GetString(body).Trim('\0', '\r', '\n', ' ');
+                        dto = JsonSerializer.Deserialize<TelemetryDto>(jsonString, _jsonOptions);
+                        if (dto == null) throw new Exception("Telemetry DTO deserialized to null from string fallback.");
+                    }
+                    catch (Exception innerEx)
+                    {
+                        _logger.LogWarning(innerEx, "Failed to deserialize telemetry message; acking to drop");
+                        try { _channel.BasicAck(ea.DeliveryTag, false); } catch { }
+                        return;
+                    }
                 }
 
-                if (!_mappingCache.TryGet(dto.DeviceId, dto.deviceSlaveId, out var mapping))
+                if (dto == null)
                 {
-                    _logger.LogDebug("Telemetry unmapped for Device:{Device} Port:{Port}", dto.DeviceId, dto.deviceSlaveId);
-                    _channel.BasicAck(ea.DeliveryTag, false);
+                    try { _channel.BasicAck(ea.DeliveryTag, false); } catch { }
                     return;
                 }
 
+                // Try both possible TryGet signatures (defensive)
+                bool mapped = false;
+                MappingInfo mapping = null;
+                try
+                {
+                    mapped = _mappingCache.TryGet(dto.DeviceId, dto.deviceSlaveId, dto.RegisterAddress, out mapping);
+                }
+                catch
+                {
+                    // logger
+                    Console.WriteLine("MappingCache TryGet failed with 4-parameter overload, trying 3-parameter overload.");
+                }
+
+
+                if (!mapped || mapping == null)
+                {
+                    _logger.LogDebug("Telemetry unmapped for Device:{Device} Port:{Port} Reg:{Reg}", dto.DeviceId, dto.deviceSlaveId, dto.RegisterAddress);
+                    try { _channel.BasicAck(ea.DeliveryTag, false); } catch { }
+                    return;
+                }
+
+                // Build DTO for InfluxDB
                 var influxDto = new InfluxTelementryDto
                 {
                     AssetId = mapping.AssetId,
@@ -150,10 +182,11 @@ namespace Infrastructure.Service
                     RegisterAddress = dto.RegisterAddress,
                     SignalType = mapping.SignalName,
                     Value = dto.Value,
-                    Unit = dto.Unit,
+                    Unit = mapping.SignalUnit ?? dto.Unit,
                     Timestamp = dto.TimestampUtc
                 };
 
+                // write telemetry and handle alert/notification flow in a scope
                 using var scope = _serviceProvider.CreateScope();
                 var influxService = scope.ServiceProvider.GetRequiredService<IInfluxTelementryService>();
                 await influxService.WriteTelemetryAsync(influxDto);
@@ -164,90 +197,132 @@ namespace Infrastructure.Service
                 // Get asset name
                 var assetName = await assetService.GetAssetNameAsync(mapping.AssetId) ?? "Unknown Asset";
 
-                //Console.WriteLine(mapping.SignalTypeId);
                 // Get signal thresholds
                 var signal = await assetService.GetSignalTypeAsync(mapping.SignalTypeId);
-              
-                if (signal != null && influxDto.SignalTypeId == signal.SignalTypeID && influxDto.RegisterAddress == signal.DefaultRegisterAdress )
+
+                if (signal != null)
                 {
-                    // after you already have `signal` and `influxDto`:
-                    var now = DateTime.UtcNow;
-                    var mappingKey = mapping.MappingId; // use MappingId as unique key
-
-                    bool isOutOfRange = influxDto.Value < signal.MinThreshold || influxDto.Value > signal.MaxThreshold;
-
-                    if (isOutOfRange)
+                    // compare register addresses - support both typo and correct property names
+                    bool registerMatches = false;
+                    try
                     {
-                        // check if there is already an active alert
-                        var current = await _alertStore.GetAsync(mappingKey);
-                        if (current == null || !current.IsActive)
+                        // many codebases sometimes use DefaultRegisterAdress (misspelt) - check both
+                        var defaultAddrProp = signal.GetType().GetProperty("DefaultRegisterAdress");
+                        if (defaultAddrProp != null)
                         {
-                            // start alert
-                            await _alertStore.SetActiveAsync(mappingKey, now, influxDto.Value);
-
-                            var startPayload = BuildNotificationPayload(
-                                assetName,
-                                signal.SignalName,
-                                influxDto.Value,
-                                signal.MinThreshold,
-                                signal.MaxThreshold
-                            );
-
-                            var notificationRequest = new NotificationCreateRequest(
-                                Title: $"Alert START: {signal.SignalName} exceeded",
-                                Text: JsonSerializer.Serialize(startPayload),
-                                ExpiresAt: null,
-                                Priority: 0
-                            );
-
-                            await notificationService.CreateForUsersAsync(notificationRequest);
-                            _logger.LogInformation("Sent START notification for {Asset} {Signal}", assetName, signal.SignalName);
-                        }
-                        else
-                        {
-                            // already active — update stats only
-                            await _alertStore.UpdateActiveAsync(mappingKey, influxDto.Value, now);
-                            // optionally log/debug
+                            var val = defaultAddrProp.GetValue(signal);
+                            if (val != null && int.TryParse(val.ToString(), out var r) && r == influxDto.RegisterAddress) registerMatches = true;
                         }
                     }
-                    else
-                    {
-                        // value back to normal — if active then clear and send resolved notification
-                        var active = await _alertStore.GetAsync(mappingKey);
-                        if (active != null && active.IsActive)
-                        {
-                            var saved = await _alertStore.ClearActiveAsync(mappingKey, now);
+                    catch { /* ignore reflection errors */ }
 
-                            if (saved != null)
+                    try
+                    {
+                        var defaultAddrProp2 = signal.GetType().GetProperty("DefaultRegisterAddress");
+                        if (!registerMatches && defaultAddrProp2 != null)
+                        {
+                            var val = defaultAddrProp2.GetValue(signal);
+                            if (val != null && int.TryParse(val.ToString(), out var r) && r == influxDto.RegisterAddress) registerMatches = true;
+                        }
+                    }
+                    catch { /* ignore reflection errors */ }
+
+                    // fallback: if signal has an int property named DefaultRegisterAdress/Address not accessible via reflection above,
+                    // attempt a safe direct comparison if those properties exist at compile time in your DTO
+                    // (you can remove the reflection if you are sure of the property name).
+                    if (!registerMatches)
+                    {
+                        // attempt direct access via common names (works if property exists)
+                        try
+                        {
+                            dynamic dsig = signal;
+                            int? defaultAddr = null;
+                            try { defaultAddr = (int?)dsig.DefaultRegisterAdress; } catch { }
+                            try { if (defaultAddr == null) defaultAddr = (int?)dsig.DefaultRegisterAddress; } catch { }
+
+                            if (defaultAddr.HasValue && defaultAddr.Value == influxDto.RegisterAddress) registerMatches = true;
+                        }
+                        catch { /* ignore dynamic failures */ }
+                    }
+
+                    // if register doesn't match, skip alert checks
+                    if (registerMatches)
+                    {
+                        var now = DateTime.UtcNow;
+                        var mappingKey = mapping.MappingId; // unique key for alert store
+
+                        bool isOutOfRange = influxDto.Value < signal.MinThreshold || influxDto.Value > signal.MaxThreshold;
+
+                        if (isOutOfRange)
+                        {
+                            // check if there is already an active alert
+                            var current = await _alertStore.GetAsync(mappingKey);
+                            if (current == null || !current.IsActive)
                             {
-                                var duration = now - saved.StartUtc;
-                                var resolvedPayload = new
-                                {
-                                    asset = assetName,
-                                    signal = signal.SignalName,
-                                    from = saved.StartUtc.ToString("o"),
-                                    to = now.ToString("o"),
-                                    durationSeconds = (int)duration.TotalSeconds,
-                                    min = saved.MinValue,
-                                    max = saved.MaxValue
-                                };
+                                // start alert
+                                await _alertStore.SetActiveAsync(mappingKey, now, influxDto.Value);
+
+                                var startPayload = BuildNotificationPayload(
+                                    assetName,
+                                    signal.SignalName,
+                                    influxDto.Value,
+                                    signal.MinThreshold,
+                                    signal.MaxThreshold
+                                );
 
                                 var notificationRequest = new NotificationCreateRequest(
-                                    Title: $"Alert RESOLVED: {signal.SignalName} normalised",
-                                    Text: JsonSerializer.Serialize(resolvedPayload),
+                                    Title: $"Alert START: {signal.SignalName} exceeded",
+                                    Text: JsonSerializer.Serialize(startPayload),
                                     ExpiresAt: null,
                                     Priority: 0
                                 );
 
                                 await notificationService.CreateForUsersAsync(notificationRequest);
-                                _logger.LogInformation("Sent RESOLVED notification for {Asset} {Signal}", assetName, signal.SignalName);
+                                _logger.LogInformation("Sent START notification for {Asset} {Signal}", assetName, signal.SignalName);
+                            }
+                            else
+                            {
+                                // already active — update stats only
+                                await _alertStore.UpdateActiveAsync(mappingKey, influxDto.Value, now);
+                            }
+                        }
+                        else
+                        {
+                            // value back to normal — if active then clear and send resolved notification
+                            var active = await _alertStore.GetAsync(mappingKey);
+                            if (active != null && active.IsActive)
+                            {
+                                var saved = await _alertStore.ClearActiveAsync(mappingKey, now);
+
+                                if (saved != null)
+                                {
+                                    var duration = now - saved.StartUtc;
+                                    var resolvedPayload = new
+                                    {
+                                        asset = assetName,
+                                        signal = signal.SignalName,
+                                        from = saved.StartUtc.ToString("o"),
+                                        to = now.ToString("o"),
+                                        durationSeconds = (int)duration.TotalSeconds,
+                                        min = saved.MinValue,
+                                        max = saved.MaxValue
+                                    };
+
+                                    var notificationRequest = new NotificationCreateRequest(
+                                        Title: $"Alert RESOLVED: {signal.SignalName} normalised",
+                                        Text: JsonSerializer.Serialize(resolvedPayload),
+                                        ExpiresAt: null,
+                                        Priority: 0
+                                    );
+
+                                    await notificationService.CreateForUsersAsync(notificationRequest);
+                                    _logger.LogInformation("Sent RESOLVED notification for {Asset} {Signal}", assetName, signal.SignalName);
+                                }
                             }
                         }
                     }
-
                 }
 
-                //_logger.LogInformation("Telemetry written to InfluxDB for Device:{Device} Signal:{Signal}", dto.DeviceId, mapping.SignalName);
                 _channel.BasicAck(ea.DeliveryTag, false);
             }
             catch (Exception ex)
