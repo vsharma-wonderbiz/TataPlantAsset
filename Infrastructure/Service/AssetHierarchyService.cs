@@ -1,12 +1,13 @@
-﻿using System.Net.Mail;
-using System.Threading.Tasks;
-using Application.DTOs;
+﻿using Application.DTOs;
 using Application.Interface;
 using Domain.Entities;
 using Infrastructure.DBs;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Net.Mail;
+using System.Threading.Tasks;
 
 namespace Infrastructure.Service
 {
@@ -396,6 +397,23 @@ namespace Infrastructure.Service
             _context.Assets.Update(asset);
             await _context.SaveChangesAsync();
             return true;
+        }
+
+
+        public async Task<string?> GetAssetNameAsync(Guid assetId)
+        {
+            var asset = await _context.Assets
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(a => a.AssetId == assetId);
+            return asset?.Name;
+        }
+
+
+        public async Task<SignalTypes?> GetSignalTypeAsync(Guid signalTypeId)
+        {
+            return await _context.SignalTypes
+                           .AsNoTracking()
+                           .FirstOrDefaultAsync(s => s.SignalTypeID == signalTypeId);
         }
 
 
