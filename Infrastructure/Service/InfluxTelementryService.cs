@@ -78,10 +78,10 @@ namespace Infrastructure.Service
                 if (mapping == null)
                     throw new Exception($"Mapping not found for AssetId:{request.AssetId} and SignalTypeId:{request.SignalTypeId}");
 
-                // 🔥 Get start and end time based on time range
+                // Get start and end time based on time range
                 var (startTime, endTime) = GetTimeRange(request);
 
-                // 🔥 Build Flux query
+                // Build Flux query
                 string flux = BuildFluxQuery(mapping.MappingId, startTime, endTime);
 
                 Log.Information("Executing Flux Query | MappingId:{MappingId} | Start:{Start} | End:{End}",
@@ -125,7 +125,7 @@ namespace Infrastructure.Service
             }
         }
 
-        // 🔥 BACKWARD COMPATIBLE: Old method with string startTime
+        
         public async Task<TelemetryResponseDto> GetTelemetrySeriesAsync(Guid assetId, Guid signalTypeId, string startTime)
         {
             DateTime startDateTime;
@@ -157,7 +157,7 @@ namespace Infrastructure.Service
             return await GetTelemetrySeriesAsync(request);
         }
 
-        // 🔥 Helper: Get time range based on enum
+        //Helper to calculate the time
         private (DateTime startTime, DateTime endTime) GetTimeRange(TelemetryRequestDto request)
         {
             var now = DateTime.UtcNow;
@@ -206,7 +206,7 @@ namespace Infrastructure.Service
             return (startTime, endTime);
         }
 
-        // 🔥 Helper: Build Flux query
+        // helper Build Flux query
         private string BuildFluxQuery(Guid mappingId, DateTime startTime, DateTime endTime)
         {
             var fluxStartTime = startTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
@@ -221,7 +221,7 @@ namespace Infrastructure.Service
                 |> sort(columns: [""_time""], desc: false)";
         }
 
-        // 🔥 Helper: Parse relative time strings
+        // Helper:parse the time string 
         private DateTime ParseRelativeTime(string relativeTime)
         {
             var now = DateTime.UtcNow;
