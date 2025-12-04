@@ -81,6 +81,8 @@ namespace WebAPI.Controllers
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"ERROR: {ex.Message}");
+                Console.WriteLine($"STACK: {ex.StackTrace}");
                 return BadRequest(new { error = ex.Message });
             }
         }
