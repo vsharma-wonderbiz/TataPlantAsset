@@ -145,5 +145,35 @@ namespace Api.Controllers
 
 
 
+        [HttpPost("bulk-upload")]
+        public async Task<IActionResult> BulkUpload([FromBody] AssetUploadRequest assets)
+        {
+            try
+            {
+                if (assets == null || !assets.Assets.Any())
+                {
+                    return BadRequest("No asset records found in request.");
+                }
+
+                var response = await service.BulkInsertAssetsAsync(assets);
+                return Ok(response); // 200
+            }
+            catch (ArgumentException ex)
+            {
+                // If service throws a handled business rule exception
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                // For unexpected exceptions
+                return StatusCode(500, new
+                {
+                    message = "An error occurred while uploading assets.",
+                    error = ex.Message
+                });
+            }
+        }
+
+
     }
 }

@@ -4,6 +4,7 @@ using Domain.Entities;
 using Infrastructure.DBs;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Net.Mail;
@@ -414,6 +415,87 @@ namespace Infrastructure.Service
             return await _context.SignalTypes
                            .AsNoTracking()
                            .FirstOrDefaultAsync(s => s.SignalTypeID == signalTypeId);
+        }
+
+
+        public async Task<AssetUploadResponse> BulkInsertAssetsAsync(AssetUploadRequest assets)
+        {
+            try
+            {
+                // Store original row numbers for correct response
+                var OriginalRowNumber = new Dictionary<string, int>();
+               for(int i = 0; i < assets.Assets.Count; i++)
+                {
+                    OriginalRowNumber[assets.Assets[i].AssetName] =i+1;
+                }
+
+                var response = new AssetUploadResponse
+                {
+                    SkippedAssets = new List<string>(),
+                    AddedAssets = new List<string>()
+                };
+
+                var NewAssetIds = new Dictionary<string, Guid>();
+
+                // Sort level wise to maintain hierarchy
+                var SortedAssets = assets.Assets.OrderBy(a => a.Level);
+
+                foreach (var asset in SortedAssets)
+                {
+                    var exists = await _context.Assets.AnyAsync(a => a.Name == asset.AssetName);
+
+                    if (exists)
+                    {
+                        response.SkippedAssets.Add(
+                            $"Asset '{asset.AssetName}' already exists in DB (Original Row: {OriginalRowNumber[asset.AssetName]})"
+                        );
+                        continue;
+                    }
+
+                    // Parent ID determine
+                    Guid? parentId = null;
+
+                    if (!string.IsNullOrEmpty(asset.ParentName))
+                    {
+                        var parent = await _context.Assets.FirstOrDefaultAsync(a => a.Name == asset.ParentName);
+
+                        if (parent != null)
+                        {
+                            parentId = parent.AssetId;
+                        }
+                        else
+                        {
+                            response.SkippedAssets.Add(
+                                $"Parent '{asset.ParentName}' not found for Asset '{asset.AssetName}' (Original Row: {OriginalRowNumber[asset.AssetName]})"
+                            );
+                            continue;
+                        }
+                    }
+
+                    var newAsset = new Asset
+                    {
+                        AssetId = Guid.NewGuid(),
+                        Name = asset.AssetName,
+                        ParentId = parentId,
+                        Level = asset.Level,
+                        IsDeleted = false
+                    };
+
+                    await _context.Assets.AddAsync(newAsset);
+                    NewAssetIds[asset.AssetName] = newAsset.AssetId;
+
+                    response.AddedAssets.Add(
+                        $"Asset '{asset.AssetName}' added successfully (Original Row: {OriginalRowNumber[asset.AssetName]})"
+                    );
+                }
+
+                await _context.SaveChangesAsync();
+                return response;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error occurred while uploading assets: {ex.Message}");
+            }
         }
 
 
