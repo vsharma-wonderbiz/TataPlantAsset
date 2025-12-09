@@ -442,7 +442,7 @@ namespace Infrastructure.Service
 
                 foreach (var asset in SortedAssets)
                 {
-                    var exists = await _context.Assets.AnyAsync(a => a.Name == asset.AssetName);
+                    var exists = await _context.Assets.AnyAsync(a => a.Name == asset.AssetName && a.IsDeleted==false);
 
                     if (exists)
                     {
@@ -457,7 +457,7 @@ namespace Infrastructure.Service
 
                     if (!string.IsNullOrEmpty(asset.ParentName))
                     {
-                        var parent = await _context.Assets.FirstOrDefaultAsync(a => a.Name == asset.ParentName);
+                        var parent = await _context.Assets.FirstOrDefaultAsync(a => a.Name == asset.ParentName && a.IsDeleted==false);
 
                         if (parent != null)
                         {
