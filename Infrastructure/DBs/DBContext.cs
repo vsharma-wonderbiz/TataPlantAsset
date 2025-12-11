@@ -7,23 +7,16 @@ namespace Infrastructure.DBs
 {
     public class DBContext : DbContext
     {
-        public DBContext(DbContextOptions options) : base(options)
-        {
-        }
+        // ✅ Use generic DbContextOptions<DBContext>
+        public DBContext(DbContextOptions<DBContext> options) : base(options) { }
 
-        // Domain sets
-        public DbSet<Asset> Assets { get; set; }
-        public DbSet<SignalTypes> SignalTypes { get; set; }
-        public DbSet<AssetConfiguration> AssetConfigurations { get; set; }
+        public DbSet<Asset> Assets { get; set; } = null!;
+        public DbSet<SignalTypes> SignalTypes { get; set; } = null!;
+        public DbSet<AssetConfiguration> AssetConfigurations { get; set; } = null!;
         public DbSet<Notification> Notifications { get; set; } = null!;
         public DbSet<NotificationRecipient> NotificationRecipients { get; set; } = null!;
-
-        // Mapping table you already provided
-        // Keep property name if other parts of your code expect `MappingTable`
-        public DbSet<AssetSignalDeviceMapping> MappingTable { get; set; }
-
-        // Aggregated time-series table (EF Code-First)
-        public DbSet<SignalData> SignalData { get; set; }
+        public DbSet<AssetSignalDeviceMapping> MappingTable { get; set; } = null!;
+        public DbSet<SignalData> SignalData { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

@@ -1,4 +1,4 @@
-﻿using Api.Extesnion; // your extension methods
+﻿using Api.Extesnion;
 using Application.Interface;
 using Infrastructure.Configuration;
 using Infrastructure.DBs;
@@ -9,44 +9,114 @@ using Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using System;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using Microsoft.AspNetCore.Routing;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// -------------------- Serilog --------------------
+// -------------------------------------------------------
+//  SERILOG
+// -------------------------------------------------------
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .CreateLogger();
 
-// Let the Host use Serilog for the built-in logging pipeline
 builder.Host.UseSerilog();
 
-// -------------------- Configuration --------------------
+// -------------------------------------------------------
+//  CONFIG
+// -------------------------------------------------------
 builder.Services.Configure<TelemetryOptions>(builder.Configuration.GetSection("Telemetry"));
 var configuration = builder.Configuration;
-var connectionString = configuration.GetConnectionString("DefaultConnection")
-                       ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is missing.");
 
-// -------------------- DbContextFactory --------------------
+// -------------------------------------------------------
+//  MAIN DB (FACTORY)
+// -------------------------------------------------------
+var connectionString = configuration.GetConnectionString("DefaultConnection")
+                       ?? throw new InvalidOperationException("Missing DefaultConnection.");
+
 builder.Services.AddDbContextFactory<DBContext>(options =>
     options.UseSqlServer(connectionString));
 
-// -------------------- Authentication & Authorization --------------------
-// This extension should add authentication schemes (e.g., JWT) and configure JwtBearerOptions if needed.
-builder.Services.AddCustomAuthentication(builder.Configuration);
+// -------------------------------------------------------
+//  USER AUTH DB
+// -------------------------------------------------------
+var userAuthConnectionString = configuration.GetConnectionString("DefaultStr")
+    ?? throw new InvalidOperationException("Missing DefaultStr.");
+
+builder.Services.AddDbContext<UserAuthDbContext>(options =>
+    options.UseSqlServer(userAuthConnectionString));
+
+// -------------------------------------------------------
+//  JWT AUTHENTICATION
+// -------------------------------------------------------
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+
+        ValidIssuer = configuration["Jwt:Issuer"],
+        ValidAudience = configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(configuration["Jwt:Key"])
+        ),
+
+        NameClaimType = "UserId",
+        RoleClaimType = ClaimTypes.Role
+    };
+
+    // ---------------------------
+    // SIGNALR TOKEN FIX
+    // ---------------------------
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var token = context.Request.Query["access_token"];
+
+            // SignalR handshake fix
+            if (!string.IsNullOrEmpty(token) &&
+                context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+            {
+                context.Token = token;
+            }
+
+            return Task.CompletedTask;
+        },
+
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine("JWT ERROR: " + context.Exception.Message);
+            return Task.CompletedTask;
+        }
+    };
+});
+
 builder.Services.AddAuthorization();
 
-// -------------------- Controllers / Swagger --------------------
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
-// -------------------- CORS --------------------
+// -------------------------------------------------------
+//  CORS
+// -------------------------------------------------------
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", policyBuilder =>
+    options.AddPolicy("AllowReactApp", builder =>
     {
-        policyBuilder
+        builder
             .WithOrigins("http://localhost:3000")
             .AllowAnyHeader()
             .AllowAnyMethod()
@@ -54,10 +124,17 @@ builder.Services.AddCors(options =>
     });
 });
 
-// -------------------- Options + Scoped Services --------------------
-builder.Services.Configure<InfluxDbOptions>(configuration.GetSection("InfluxDb"));
-// TelemetryOptions already configured above — don't repeat it.
+// -------------------------------------------------------
+//  CONTROLLERS + SWAGGER
+// -------------------------------------------------------
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
+// -------------------------------------------------------
+//  SERVICES
+// -------------------------------------------------------
+builder.Services.Configure<InfluxDbOptions>(configuration.GetSection("InfluxDb"));
 builder.Services.AddSingleton<IInfluxDbConnectionService, InfluxDbConnectionService>();
 builder.Services.AddScoped<IInfluxTelementryService, InfluxTelemetryService>();
 
@@ -66,62 +143,97 @@ builder.Services.AddScoped<IAssetHierarchyService, AssetHierarchyService>();
 builder.Services.AddScoped<IAssetConfiguration, AssetConfigurationService>();
 builder.Services.AddScoped<IMappingService, AssetMappingService>();
 
-// Notification service + cleanup
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<ExpiredNotificationCleanupService>();
 
-// -------------------- SignalR --------------------
-builder.Services.AddSignalR();
-
-// Register IUserIdProvider so SignalR Clients.User(...) maps correctly to your stored user id
-builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, Infrastructure.Hubs.NameIdentifierUserIdProvider>();
-
-// -------------------- Singleton / Cache --------------------
+// Mapping Cache
 builder.Services.AddSingleton<IMappingCache>(sp =>
 {
-    var dbFactory = sp.GetRequiredService<IDbContextFactory<DBContext>>();
-    return new MappingCache(dbFactory);
+    var factory = sp.GetRequiredService<IDbContextFactory<DBContext>>();
+    return new MappingCache(factory);
 });
 
-// -------------------- Background Services --------------------
+// Background Tasks
 builder.Services.AddHostedService<InfluxDbInitializationService>();
 builder.Services.AddHostedService<TelemetryBackgroundService>();
 
 builder.Services.AddSingleton<IAlertStateStore, MemoryAlertStateStore>();
 
+// -------------------------------------------------------
+//  SIGNALR
+// -------------------------------------------------------
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, NameIdentifierUserIdProvider>();
 
-// -------------------- Build App --------------------
+// -------------------------------------------------------
+//  BUILD APP
+// -------------------------------------------------------
 var app = builder.Build();
 
-// -------------------- Serilog request logging --------------------
 app.UseSerilogRequestLogging();
 
-// -------------------- Swagger UI --------------------
+// -------------------------------------------------------
+//  SWAGGER
+// -------------------------------------------------------
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// -------------------- Seeder Execution --------------------
+// -------------------------------------------------------
+//  DB SEEDER
+// -------------------------------------------------------
 using (var scope = app.Services.CreateScope())
 {
-    var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DBContext>>();
-    using var dbContext = dbContextFactory.CreateDbContext();
-    await SignalTypessSeeder.SeedAsync(dbContext);
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DBContext>>();
+    using var db = factory.CreateDbContext();
+    await SignalTypessSeeder.SeedAsync(db);
 }
 
-// -------------------- Map Hub --------------------
-app.MapHub<NotificationHub>("/hubs/notifications");
+// -------------------------------------------------------
+//  MIDDLEWARE FIX — Random 401 (COOKIE → HEADER)
+// -------------------------------------------------------
+app.Use(async (context, next) =>
+{
+    if (!context.Request.Headers.ContainsKey("Authorization"))
+    {
+        var token = context.Request.Cookies["access_token"];
 
-// -------------------- Middleware (CORRECT ORDER) --------------------
+        if (!string.IsNullOrWhiteSpace(token) &&
+            token.Count(c => c == '.') == 2)
+        {
+            context.Request.Headers.Append("Authorization", "Bearer " + token);
+        }
+    }
+
+    await next();
+});
+
+
+
+// -------------------------------------------------------
+//  PIPELINE
+// -------------------------------------------------------
 app.UseHttpsRedirection();
 app.UseCors("AllowReactApp");
 
 app.UseAuthentication();
 app.UseAuthorization();
 
+// -------------------------------------------------------
+//  SIGNALR HUB
+// -------------------------------------------------------
+app.MapHub<NotificationHub>("/hubs/notifications");
+
+// -------------------------------------------------------
+//  CONTROLLERS
+// -------------------------------------------------------
 app.MapControllers();
 
-// -------------------- Run App --------------------
+// Print all endpoints
+var endpointDataSource = app.Services.GetRequiredService<EndpointDataSource>();
+foreach (var endpoint in endpointDataSource.Endpoints)
+    Console.WriteLine("ENDPOINT: " + endpoint.DisplayName);
+
 app.Run();
