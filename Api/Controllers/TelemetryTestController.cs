@@ -4,6 +4,7 @@ using Infrastructure.DBs;
 using Application.Interface;
 using Application.DTOs;
 using Application.Enums;
+using Infrastructure.Seeding;
 
 namespace WebAPI.Controllers
 {
@@ -13,11 +14,13 @@ namespace WebAPI.Controllers
     {
         private readonly IInfluxDbConnectionService _connectionService;
         private readonly IInfluxTelementryService _TelementryService;
+        private readonly BackfillService _backfill;
 
-        public TelemetryTestController(IInfluxDbConnectionService connectionService, IInfluxTelementryService telementryService)
+        public TelemetryTestController(IInfluxDbConnectionService connectionService, IInfluxTelementryService telementryService,BackfillService backfill)
         {
             _connectionService = connectionService;
             _TelementryService = telementryService;
+            _backfill = backfill;
         }
 
         [HttpGet("health")]
@@ -161,6 +164,18 @@ namespace WebAPI.Controllers
             {
                 return BadRequest(new { error = ex.Message });
             }
+        }
+
+
+
+
+        [HttpPost("generate")]
+        public async Task<IActionResult> GenerateBackfill()
+        {
+            // Run in background so API doesn't block
+            _ = Task.Run(async () => await _backfill.GenerateBackfillData());
+
+            return Ok("Backfill started. It may take a few minutes to complete.");
         }
     }
 }
