@@ -1,7 +1,8 @@
 ﻿using Application.Interface;
+using Application.Dtos;
 using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
 using System;
+using System.Threading.Tasks;
 
 namespace Api.Controllers
 {
@@ -13,9 +14,9 @@ namespace Api.Controllers
 
         public NotificationsController(INotificationService svc) => _svc = svc;
 
-        // -------------------------------
-        // SEND Notification
-        // -------------------------------
+        // -----------------------------------------------------
+        // SEND NOTIFICATION
+        // -----------------------------------------------------
         [HttpPost("send")]
         public async Task<IActionResult> Send([FromBody] NotificationCreateRequest req)
         {
@@ -38,13 +39,14 @@ namespace Api.Controllers
             }
         }
 
-        // -------------------------------
+        // -----------------------------------------------------
         // MARK AS READ
-        // -------------------------------
+        // -----------------------------------------------------
         [HttpPost("read/{recipientId:guid}")]
         public async Task<IActionResult> MarkAsRead(Guid recipientId)
         {
-            var userId = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            // FIXED: use "UserId" from JWT
+            var userId = User?.FindFirst("UserId")?.Value;
 
             if (string.IsNullOrEmpty(userId))
                 return Unauthorized(new { message = "User not authenticated." });
@@ -64,13 +66,14 @@ namespace Api.Controllers
             }
         }
 
-        // -------------------------------
+        // -----------------------------------------------------
         // ACKNOWLEDGE
-        // -------------------------------
+        // -----------------------------------------------------
         [HttpPost("ack/{recipientId:guid}")]
         public async Task<IActionResult> Acknowledge(Guid recipientId)
         {
-            var userId = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            // FIXED: use "UserId" claim
+            var userId = User?.FindFirst("UserId")?.Value;
 
             if (string.IsNullOrEmpty(userId))
                 return Unauthorized(new { message = "User not authenticated." });
@@ -90,6 +93,9 @@ namespace Api.Controllers
             }
         }
 
+        // -----------------------------------------------------
+        // GET ALL (ADMIN)
+        // -----------------------------------------------------
         [HttpGet("all")]
         public async Task<IActionResult> GetAll()
         {
@@ -109,6 +115,59 @@ namespace Api.Controllers
             }
         }
 
+        // -----------------------------------------------------
+        // GET MY NOTIFICATIONS
+        // -----------------------------------------------------
+        [HttpGet("my")]
+        public async Task<IActionResult> GetMy([FromQuery] bool unread = false)
+        {
+            // FIXED: use "UserId" from JWT
+            var userId = User?.FindFirst("UserId")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { message = "User not authenticated." });
+
+            try
+            {
+                var list = await _svc.GetForUserAsync(userId, unread);
+
+                return Ok(new
+                {
+                    message = unread ? "Unread notifications fetched." : "All user notifications fetched.",
+                    data = list
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Failed to fetch notifications.", error = ex.Message });
+            }
+        }
+
+        // -----------------------------------------------------
+        // MARK ALL AS READ
+        // -----------------------------------------------------
+        [HttpPost("readall")]
+        public async Task<IActionResult> MarkAllAsRead()
+        {
+            var userId = User?.FindFirst("UserId")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { message = "User not authenticated." });
+
+            try
+            {
+                var updated = await _svc.MarkAllAsReadAsync(userId);
+
+                if (!updated)
+                    return Ok(new { message = "No unread notifications found." });
+
+                return Ok(new { message = "All notifications marked as read." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Failed to mark all notifications as read.", error = ex.Message });
+            }
+        }
 
     }
 }
