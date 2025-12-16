@@ -22,17 +22,18 @@ namespace Infrastructure.Seeding
         private readonly IDbContextFactory<DBContext> _dbFactory;
 
         private readonly Dictionary<string, (float Min, float Max)> SignalRanges =
-            new Dictionary<string, (float Min, float Max)>
-            {
-                { "Voltage",     (18f, 26f) },
-                { "Current",     (0f, 50f) },
-                { "Temperature", (-10f, 80f) },
-                { "Frequency",   (45f, 65f) },
-                { "Vibration",   (0f, 10f) },
-                { "FlowRate",    (1f, 200f) },
-                { "RPM",         (100f, 6000f) },
-                { "Torque",      (0f, 500f) }
-            };
+           new Dictionary<string, (float Min, float Max)>
+{
+    { "Voltage",     (21.49f, 22.51f) },    
+    { "Current",     (14.70f, 15.31f) },
+    { "Temperature", (28.98f, 31.02f) },
+    { "Frequency",   (4.90f, 5.10f) },
+    { "Vibration",   (0.15f, 0.25f) },
+    { "FlowRate",    (9.20f, 10.82f) },
+    { "RPM",         (16.80f, 19.22f) },
+    { "Torque",      (2.30f, 2.70f) }
+};
+
 
         public BackfillService(
             IInfluxDbConnectionService client,
