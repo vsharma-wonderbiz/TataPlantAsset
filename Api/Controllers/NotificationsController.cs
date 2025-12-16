@@ -1,5 +1,5 @@
 ﻿using Application.Interface;
-using Application.Dtos;
+using Application.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Threading.Tasks;
@@ -12,10 +12,13 @@ namespace Api.Controllers
     {
         private readonly INotificationService _svc;
 
-        public NotificationsController(INotificationService svc) => _svc = svc;
+        public NotificationsController(INotificationService svc)
+        {
+            _svc = svc;
+        }
 
         // -----------------------------------------------------
-        // SEND NOTIFICATION
+        // SEND NOTIFICATION (ADMIN / SYSTEM)
         // -----------------------------------------------------
         [HttpPost("send")]
         public async Task<IActionResult> Send([FromBody] NotificationCreateRequest req)
@@ -35,17 +38,20 @@ namespace Api.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to send notification.", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Failed to send notification.",
+                    error = ex.Message
+                });
             }
         }
 
         // -----------------------------------------------------
-        // MARK AS READ
+        // MARK SINGLE NOTIFICATION AS READ
         // -----------------------------------------------------
         [HttpPost("read/{recipientId:guid}")]
         public async Task<IActionResult> MarkAsRead(Guid recipientId)
         {
-            // FIXED: use "UserId" from JWT
             var userId = User?.FindFirst("UserId")?.Value;
 
             if (string.IsNullOrEmpty(userId))
@@ -56,23 +62,29 @@ namespace Api.Controllers
                 var updated = await _svc.MarkAsReadAsync(recipientId, userId);
 
                 if (!updated)
-                    return NotFound(new { message = "Notification recipient not found or access denied." });
+                    return NotFound(new
+                    {
+                        message = "Notification not found or access denied."
+                    });
 
                 return Ok(new { message = "Notification marked as read." });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to update notification.", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Failed to update notification.",
+                    error = ex.Message
+                });
             }
         }
 
         // -----------------------------------------------------
-        // ACKNOWLEDGE
+        // ACKNOWLEDGE NOTIFICATION
         // -----------------------------------------------------
         [HttpPost("ack/{recipientId:guid}")]
         public async Task<IActionResult> Acknowledge(Guid recipientId)
         {
-            // FIXED: use "UserId" claim
             var userId = User?.FindFirst("UserId")?.Value;
 
             if (string.IsNullOrEmpty(userId))
@@ -83,45 +95,64 @@ namespace Api.Controllers
                 var updated = await _svc.AcknowledgeAsync(recipientId, userId);
 
                 if (!updated)
-                    return NotFound(new { message = "Notification recipient not found or access denied." });
+                    return NotFound(new
+                    {
+                        message = "Notification not found or access denied."
+                    });
 
                 return Ok(new { message = "Notification acknowledged." });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to acknowledge notification.", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Failed to acknowledge notification.",
+                    error = ex.Message
+                });
             }
         }
 
         // -----------------------------------------------------
-        // GET ALL (ADMIN)
+        // GET ALL NOTIFICATIONS (ADMIN)
         // -----------------------------------------------------
         [HttpGet("all")]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll(
+     [FromQuery] DateTime? cursor = null,
+     [FromQuery] int limit = 10
+ )
         {
             try
             {
-                var list = await _svc.GetAllNotificationsAsync();
+                var result = await _svc.GetAllNotificationsCursorAsync(cursor, limit);
 
                 return Ok(new
                 {
-                    message = "Notifications fetched successfully.",
-                    data = list
+                    data = result.Items,
+                    nextCursor = result.NextCursor,
+                    hasMore = result.HasMore
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to fetch notifications.", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Failed to fetch notifications.",
+                    error = ex.Message
+                });
             }
         }
 
+
         // -----------------------------------------------------
-        // GET MY NOTIFICATIONS
+        // GET MY NOTIFICATIONS (CURSOR PAGINATION)
         // -----------------------------------------------------
         [HttpGet("my")]
-        public async Task<IActionResult> GetMy([FromQuery] bool unread = false)
+        public async Task<IActionResult> GetMy(
+            [FromQuery] bool unread = false,
+            [FromQuery] DateTime? cursor = null,
+            [FromQuery] int limit = 10
+        )
         {
-            // FIXED: use "UserId" from JWT
             var userId = User?.FindFirst("UserId")?.Value;
 
             if (string.IsNullOrEmpty(userId))
@@ -129,22 +160,32 @@ namespace Api.Controllers
 
             try
             {
-                var list = await _svc.GetForUserAsync(userId, unread);
+                var result = await _svc.GetForUserCursorAsync(
+                    userId,
+                    unread,
+                    cursor,
+                    limit
+                );
 
                 return Ok(new
                 {
-                    message = unread ? "Unread notifications fetched." : "All user notifications fetched.",
-                    data = list
+                    data = result.Items,
+                    nextCursor = result.NextCursor,
+                    hasMore = result.HasMore
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to fetch notifications.", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Failed to fetch user notifications.",
+                    error = ex.Message
+                });
             }
         }
 
         // -----------------------------------------------------
-        // MARK ALL AS READ
+        // MARK ALL NOTIFICATIONS AS READ
         // -----------------------------------------------------
         [HttpPost("readall")]
         public async Task<IActionResult> MarkAllAsRead()
@@ -158,16 +199,21 @@ namespace Api.Controllers
             {
                 var updated = await _svc.MarkAllAsReadAsync(userId);
 
-                if (!updated)
-                    return Ok(new { message = "No unread notifications found." });
-
-                return Ok(new { message = "All notifications marked as read." });
+                return Ok(new
+                {
+                    message = updated
+                        ? "All notifications marked as read."
+                        : "No unread notifications found."
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Failed to mark all notifications as read.", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Failed to mark all notifications as read.",
+                    error = ex.Message
+                });
             }
         }
-
     }
 }
