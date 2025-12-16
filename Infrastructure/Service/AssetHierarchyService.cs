@@ -435,14 +435,23 @@ namespace Infrastructure.Service
                     AddedAssets = new List<string>()
                 };
 
-                var NewAssetIds = new Dictionary<string, Guid>();
+                var AssetIdsMApper = new Dictionary<string, Guid>();
+                var Assets = await _context.Assets.ToListAsync();
+
+                foreach(var asset in Assets)
+                {
+                    if (asset.IsDeleted == false)
+                    {
+                        AssetIdsMApper.Add(asset.Name, asset.AssetId);
+                    }
+                }
 
                 // Sort level wise to maintain hierarchy
                 var SortedAssets = assets.Assets.OrderBy(a => a.Level);
 
                 foreach (var asset in SortedAssets)
                 {
-                    var exists = await _context.Assets.AnyAsync(a => a.Name == asset.AssetName && a.IsDeleted==false);
+                    bool exists = AssetIdsMApper.ContainsKey(asset.AssetName);
 
                     if (exists)
                     {
@@ -457,11 +466,11 @@ namespace Infrastructure.Service
 
                     if (!string.IsNullOrEmpty(asset.ParentName))
                     {
-                        var parent = await _context.Assets.FirstOrDefaultAsync(a => a.Name == asset.ParentName && a.IsDeleted==false);
-
-                        if (parent != null)
+                        //var parent = await _context.Assets.FirstOrDefaultAsync(a => a.Name == asset.ParentName && a.IsDeleted==false);
+                        bool parentExsist = AssetIdsMApper.ContainsKey(asset.ParentName);
+                        if (parentExsist)
                         {
-                            parentId = parent.AssetId;
+                            parentId = AssetIdsMApper[asset.ParentName];
                         }
                         else
                         {
@@ -482,8 +491,10 @@ namespace Infrastructure.Service
                     };
 
                     await _context.Assets.AddAsync(newAsset);
-                    NewAssetIds[asset.AssetName] = newAsset.AssetId;
-
+                    if (!AssetIdsMApper.ContainsKey(newAsset.Name))
+                    {
+                        AssetIdsMApper.Add(newAsset.Name, newAsset.AssetId);
+                    }
                     response.AddedAssets.Add(
                         $"Asset '{asset.AssetName}' added successfully (Original Row: {OriginalRowNumber[asset.AssetName]})"
                     );
