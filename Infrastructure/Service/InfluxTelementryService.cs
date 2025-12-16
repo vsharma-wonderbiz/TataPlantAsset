@@ -72,13 +72,14 @@ namespace Infrastructure.Service
         {
             try
             {
+                // Fetch the mapping for the asset + signalType
                 var mapping = await _dbContext.MappingTable
                     .FirstOrDefaultAsync(m => m.AssetId == request.AssetId && m.SignalTypeId == request.SignalTypeId);
 
                 if (mapping == null)
                     throw new Exception($"Mapping not found for AssetId:{request.AssetId} and SignalTypeId:{request.SignalTypeId}");
 
-                // Get start and end time based on time range
+                // Get start and end time
                 var (startTime, endTime) = GetTimeRange(request);
 
                 // Build Flux query
@@ -87,22 +88,30 @@ namespace Infrastructure.Service
                 Log.Information("Executing Flux Query | MappingId:{MappingId} | Start:{Start} | End:{End}",
                     mapping.MappingId, startTime, endTime);
 
+                // Query InfluxDB
                 var tables = await _queryApi.QueryAsync(flux, _org);
                 var values = new List<TelemetryPointDto>();
+                int tableCounter = 0;
 
                 foreach (var table in tables)
                 {
+                    tableCounter++;
+                    Log.Information("Processing table #{TableNum} with {RecordCount} records", tableCounter, table.Records.Count);
+
                     foreach (var record in table.Records)
                     {
-                        values.Add(new TelemetryPointDto
+                        if (record.GetTime().HasValue && record.GetValue() != null)
                         {
-                            Time = record.GetTime().GetValueOrDefault().ToDateTimeUtc(),
-                            Value = Convert.ToDouble(record.GetValue())
-                        });
+                            values.Add(new TelemetryPointDto
+                            {
+                                Time = record.GetTime().Value.ToDateTimeUtc().ToLocalTime(),
+                                Value = Convert.ToDouble(record.GetValue())
+                            });
+                        }
                     }
                 }
 
-                Log.Information("Retrieved {Count} telemetry points | AssetId:{AssetId}", values.Count, request.AssetId);
+                Log.Information("Total telemetry points fetched: {Count}", values.Count);
 
                 return new TelemetryResponseDto
                 {
@@ -125,7 +134,8 @@ namespace Infrastructure.Service
             }
         }
 
-        
+
+
         public async Task<TelemetryResponseDto> GetTelemetrySeriesAsync(Guid assetId, Guid signalTypeId, string startTime)
         {
             DateTime startDateTime;
@@ -212,13 +222,18 @@ namespace Infrastructure.Service
             var fluxStartTime = startTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
             var fluxEndTime = endTime.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
+
+            var window = GetAggregationWindow(startTime, endTime);
+
             return $@"
-                from(bucket: ""{_bucket}"")
-                |> range(start: {fluxStartTime}, stop: {fluxEndTime})
-                |> filter(fn: (r) => r._field == ""value"")
-                |> filter(fn: (r) => r.mappingId == ""{mappingId}"")
-                |> keep(columns: [""_time"", ""_value""])
-                |> sort(columns: [""_time""], desc: false)";
+                    from(bucket: ""{_bucket}"")
+                    |> range(start: {fluxStartTime}, stop: {fluxEndTime})
+                    |> filter(fn: (r) => r._field == ""value"")
+                    |> filter(fn: (r) => r.mappingId == ""{mappingId}"")
+                    |> aggregateWindow(every: {window}, fn: mean, createEmpty: false)
+                    |> keep(columns: [""_time"", ""_value""])
+                    |> sort(columns: [""_time""], desc: false)";
+
         }
 
         // Helper:parse the time string 
@@ -249,5 +264,33 @@ namespace Infrastructure.Service
 
             throw new Exception($"Invalid relative time format: {relativeTime}");
         }
+
+
+        private string GetAggregationWindow(DateTime start, DateTime end)
+        {
+            var duration = end - start;
+
+            Log.Information($"the duration is {duration}");
+
+
+
+            if (duration <= TimeSpan.FromHours(6))
+                return "5s";
+            if (duration <= TimeSpan.FromDays(1))
+                return "1m";       // Today / last 24h → raw 1s data
+            else if (duration <= TimeSpan.FromDays(7))
+                return "5m";       // Last 7 days → 1 min aggregation
+            else if (duration <= TimeSpan.FromDays(30))
+                return "10m";       // Last 1 month → 5 min aggregation
+            else if (duration <= TimeSpan.FromDays(90))
+                return "30m";      // Last 3 months → 15 min aggregation
+            else if (duration <= TimeSpan.FromDays(180))
+                return "1h";      // Last 6 months → 30 min aggregation
+            else if (duration <= TimeSpan.FromDays(365))
+                return "2h";       // Last 1 year → 1 hour aggregation
+            else
+                return "5h";       // >1 year → 1 hour
+        }
+
     }
 }

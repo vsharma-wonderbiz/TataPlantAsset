@@ -61,6 +61,7 @@ builder.Services.Configure<InfluxDbOptions>(configuration.GetSection("InfluxDb")
 builder.Services.AddSingleton<IInfluxDbConnectionService, InfluxDbConnectionService>();
 builder.Services.AddScoped<IInfluxTelementryService, InfluxTelemetryService>();
 
+builder.Services.AddScoped<BackfillService>();
 builder.Services.AddScoped<IAssetHierarchyService, AssetHierarchyService>();
 builder.Services.AddScoped<IAssetConfiguration, AssetConfigurationService>();
 builder.Services.AddScoped<IMappingService, AssetMappingService>();

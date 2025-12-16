@@ -21,5 +21,7 @@ namespace Application.Interface
         Task<string?> GetAssetNameAsync(Guid assetId);
         Task<SignalTypes?> GetSignalTypeAsync(Guid signalTypeId);
 
+        Task<AssetUploadResponse> BulkInsertAssetsAsync(AssetUploadRequest assets);
+
     }
 }
