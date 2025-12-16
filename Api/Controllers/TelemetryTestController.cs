@@ -169,11 +169,11 @@ namespace WebAPI.Controllers
 
 
 
-        [HttpPost("generate")]
-        public async Task<IActionResult> GenerateBackfill()
+        [HttpPost("Seed/{AssetID}/{SignalTypeID}/{PollinInterval}")]
+        public async Task<IActionResult> GenerateBackfill(Guid AssetID,Guid SignalTypeID,int PollinInterval)
         {
             // Run in background so API doesn't block
-            _ = Task.Run(async () => await _backfill.GenerateBackfillData());
+            _ = Task.Run(async () => await _backfill.GenerateBackfillData(AssetID,SignalTypeID, PollinInterval));
 
             return Ok("Backfill started. It may take a few minutes to complete.");
         }

@@ -7,6 +7,9 @@ using Microsoft.Extensions.Options;
 using Application.Interface;
 using Infrastructure.Configuration;
 using InfluxDB.Client.Api.Domain;
+using Infrastructure.DBs;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Internal;
 
 namespace Infrastructure.Seeding
 {
@@ -15,18 +18,36 @@ namespace Infrastructure.Seeding
         private readonly InfluxDBClient _client;
         private readonly string _bucket;
         private readonly string _org;
+        private readonly DBContext _db;
+        private readonly IDbContextFactory<DBContext> _dbFactory;
+
+        private readonly Dictionary<string, (float Min, float Max)> SignalRanges =
+            new Dictionary<string, (float Min, float Max)>
+            {
+                { "Voltage",     (18f, 26f) },
+                { "Current",     (0f, 50f) },
+                { "Temperature", (-10f, 80f) },
+                { "Frequency",   (45f, 65f) },
+                { "Vibration",   (0f, 10f) },
+                { "FlowRate",    (1f, 200f) },
+                { "RPM",         (100f, 6000f) },
+                { "Torque",      (0f, 500f) }
+            };
 
         public BackfillService(
             IInfluxDbConnectionService client,
-            IOptions<InfluxDbOptions> options)
+            IOptions<InfluxDbOptions> options,
+            IDbContextFactory<DBContext> dbFactory)
         {
             _client = client.GetClient();
             var config = options.Value;
             _bucket = config.InfluxBucket;
             _org = config.InfluxOrg;
+           
+            _dbFactory = dbFactory;
         }
 
-        public async Task GenerateBackfillData()
+        public async Task GenerateBackfillData(Guid AssetId, Guid SignalTypeID, int pollingInterval)
         {
             Console.WriteLine($"[INFO] Backfill started at {DateTime.Now}");
 
@@ -36,31 +57,59 @@ namespace Infrastructure.Seeding
                 DateTime startLocal = DateTime.Now.AddMonths(-1);
                 DateTime endLocal = DateTime.Now;
 
+
+                await using var context = _dbFactory.CreateDbContext();
+
+                // Fetch mapping info
+                var mapping = await context.MappingTable
+                    .AsNoTracking()  // optional but faster
+                    .FirstOrDefaultAsync(a => a.AssetId == AssetId && a.SignalTypeId == SignalTypeID);
+
+                if (mapping == null)
+                {
+                    Console.WriteLine("[ERROR] Mapping not found.");
+                    return;
+                }
+
+                var info = new
+                {
+                    mapping.AssetId,
+                    mapping.SignalTypeId,
+                    mapping.DeviceId,
+                    mapping.DevicePortId,
+                    mapping.MappingId,
+                    mapping.RegisterAdress,
+                    mapping.SignalName,
+                    mapping.SignalUnit
+                };
+
+
                 Random rand = new Random();
                 int counter = 0;
-                int batchSize = 5000; // number of points per batch
+                int batchSize = 5000;
                 var batch = new List<PointData>();
 
-                for (var timestampLocal = startLocal; timestampLocal <= endLocal; timestampLocal = timestampLocal.AddSeconds(5))
+                for (var timestampLocal = startLocal; timestampLocal <= endLocal; timestampLocal = timestampLocal.AddSeconds(pollingInterval))
                 {
-                    double flowRate = 9 + rand.NextDouble() * 2;
+                    var (min, max) = GetRange(info.SignalName);
+
+                    float value = min + (float)rand.NextDouble() * (max - min);
 
                     var point = PointData.Measurement("signals")
-                        .Tag("assetId", "bb81bad0-495d-459b-0f78-08de36f00907")
-                        .Tag("signalTypeId", "f2821c2d-b350-415a-aa89-ef6ad98e4505")
-                        .Tag("deviceId", "c337db3e-68cd-44aa-bc05-ee5508b25216")
-                        .Tag("devicePortId", "e9bbf4c1-8a04-4afa-a546-036f8771afb3")
-                        .Tag("mappingId", "a2bee135-6ae6-456e-a938-9a372dd0bbe7")
-                        .Tag("RegisterAdress", "40011")
-                        .Tag("SignalName", "FlowRate")
-                        .Field("value", flowRate)
-                        .Field("unit", "L/min")
+                        .Tag("assetId", info.AssetId.ToString())
+                        .Tag("signalTypeId", info.SignalTypeId.ToString())
+                        .Tag("deviceId", info.DeviceId.ToString())
+                        .Tag("devicePortId", info.DevicePortId.ToString())
+                        .Tag("mappingId", info.MappingId.ToString())
+                        .Tag("RegisterAdress", info.RegisterAdress.ToString())
+                        .Tag("SignalName", info.SignalName)
+                        .Field("value", value)
+                        .Field("unit", info.SignalUnit)
                         .Timestamp(timestampLocal, WritePrecision.Ns);
 
                     batch.Add(point);
                     counter++;
 
-                    // Write batch if it reaches batchSize
                     if (batch.Count >= batchSize)
                     {
                         try
@@ -71,24 +120,30 @@ namespace Infrastructure.Seeding
                         }
                         catch (Exception exBatch)
                         {
-                            Console.WriteLine($"[ERROR] Failed to write batch ending at {timestampLocal}: {exBatch.Message}");
+                            Console.WriteLine($"[ERROR] Batch write failed: {exBatch.Message}");
                         }
                     }
                 }
 
-                // Write any remaining points
                 if (batch.Count > 0)
                 {
                     writeApi.WritePoints(batch, _bucket, _org);
-                    Console.WriteLine($"[INFO] Final batch of {batch.Count} points written, total points: {counter}");
+                    Console.WriteLine($"[INFO] Final batch of {batch.Count} points written. Total: {counter}");
                 }
 
-                Console.WriteLine($"[INFO] Backfill completed successfully at {DateTime.Now}, total points written: {counter}");
+                Console.WriteLine($"[INFO] Backfill completed at {DateTime.Now}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Backfill process failed: {ex.Message}");
+                Console.WriteLine($"[ERROR] Backfill failed: {ex.Message}");
             }
+        }
+
+        public (float Min, float Max) GetRange(string signalName)
+        {
+            if (SignalRanges.TryGetValue(signalName, out var range))
+                return range;
+            return (0f, 1f);
         }
     }
 }

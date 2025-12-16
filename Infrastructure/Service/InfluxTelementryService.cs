@@ -105,7 +105,7 @@ namespace Infrastructure.Service
                             values.Add(new TelemetryPointDto
                             {
                                 Time = record.GetTime().Value.ToDateTimeUtc().ToLocalTime(),
-                                Value = Convert.ToDouble(record.GetValue())
+                                Value = Convert.ToSingle(record.GetValue())
                             });
                         }
                     }

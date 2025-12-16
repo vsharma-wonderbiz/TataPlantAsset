@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Application.Dtos;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -29,5 +30,11 @@ namespace Application.Interface
         Task<bool> MarkAsReadAsync(Guid recipientId, string userId);
         Task<bool> AcknowledgeAsync(Guid recipientId, string userId);
         Task<List<NotificationDto>> GetAllNotificationsAsync();
+
+        Task<List<NotificationRecipientDto>> GetForUserAsync(string userId, bool unreadOnly);
+
+        Task<bool> MarkAllAsReadAsync(string userId);
+
+
     }
 }
