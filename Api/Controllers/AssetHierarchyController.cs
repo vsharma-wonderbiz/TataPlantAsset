@@ -38,7 +38,7 @@ namespace Api.Controllers
             return assets;
         }
 
-        [Authorize(Roles ="Admin")]
+        [Authorize(Roles = "Admin,Engineer")]
         [HttpPost("[action]")]
         public async Task<IActionResult> InsertAsset([FromBody] InsertionAssetDto asset)
         {
@@ -59,7 +59,7 @@ namespace Api.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin")]
+        [Authorize(Roles = "Admin,Engineer")]
         [HttpPut("[action]")]
         public async Task<IActionResult> UpdateAsset([FromBody] UpdateAssetDto dto)
         {
@@ -144,7 +144,7 @@ namespace Api.Controllers
         }
 
 
-
+        [Authorize(Roles = "Admin")]
         [HttpPost("bulk-upload")]
         public async Task<IActionResult> BulkUpload([FromBody] AssetUploadRequest assets)
         {
