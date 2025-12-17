@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Application.DTOs;
 using Microsoft.Identity.Client.TelemetryCore.TelemetryClient;
 using Application.DTOs;
+using Application.DTOs.ReportDTos;
 
 namespace Application.Interface
 {
@@ -14,5 +15,7 @@ namespace Application.Interface
         Task WriteTelemetryAsync(InfluxTelementryDto Dto);
         Task<TelemetryResponseDto> GetTelemetrySeriesAsync(Guid assetId, Guid signalTypeId, string startTime);
         Task<TelemetryResponseDto> GetTelemetrySeriesAsync(TelemetryRequestDto request);
+
+        Task PushToReportRequestQueueAsync(RequestReport dto);
     }
 }

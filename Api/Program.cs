@@ -158,6 +158,7 @@ builder.Services.AddHostedService<InfluxDbInitializationService>();
 builder.Services.AddHostedService<TelemetryBackgroundService>();
 
 builder.Services.AddSingleton<IAlertStateStore, MemoryAlertStateStore>();
+builder.Services.AddSingleton<RabbitMqService>();
 
 // -------------------------------------------------------
 //  SIGNALR

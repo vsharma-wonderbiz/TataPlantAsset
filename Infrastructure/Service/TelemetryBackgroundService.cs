@@ -21,6 +21,7 @@ namespace Infrastructure.Service
         public string RabbitUser { get; set; } = "guest";
         public string RabbitPass { get; set; } = "guest";
         public string Queue { get; set; } = "telemetry_queue";
+        public string ReportRequestQueue { get; set; }
         public ushort Prefetch { get; set; } = 200;
     }
 

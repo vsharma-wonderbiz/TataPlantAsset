@@ -13,5 +13,8 @@ namespace Infrastructure.Configuration
         public string InfluxOrg { get; set; }
         public string InfluxBucket { get; set; }
         public int InfluxTimout { get; set; }
+
+        public int ExcelMaxRows { get; set; }
+        public int CsvMaxRows { get; set; }
     }
 }
