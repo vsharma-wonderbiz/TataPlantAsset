@@ -1,4 +1,4 @@
-﻿namespace Application.Dtos
+﻿namespace Application.DTOs
 {
     public class NotificationRecipientDto
     {

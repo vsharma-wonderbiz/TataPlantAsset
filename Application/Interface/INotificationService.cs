@@ -1,4 +1,4 @@
-﻿using Application.Dtos;
+﻿using Application.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,12 +29,22 @@ namespace Application.Interface
         Task<NotificationDto> CreateForUsersAsync(NotificationCreateRequest req);
         Task<bool> MarkAsReadAsync(Guid recipientId, string userId);
         Task<bool> AcknowledgeAsync(Guid recipientId, string userId);
-        Task<List<NotificationDto>> GetAllNotificationsAsync();
+        Task<CursorResult<NotificationDto>> GetAllNotificationsCursorAsync(
+    DateTime? cursor,
+    int limit
+);
 
-        Task<List<NotificationRecipientDto>> GetForUserAsync(string userId, bool unreadOnly);
-
+        Task<CursorResult<NotificationRecipientDto>> GetForUserCursorAsync(
+                   string userId,
+                   bool unreadOnly,
+                   DateTime? cursor,
+                   int limit
+               );
         Task<bool> MarkAllAsReadAsync(string userId);
 
 
     }
 }
+
+
+

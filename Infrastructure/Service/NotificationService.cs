@@ -1,10 +1,10 @@
 ﻿using Application.Interface;
-using Application.Dtos;
+using Application.DTOs;
 using Domain.Entities;
 using Infrastructure.DBs;
+using Infrastructure.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Infrastructure.Hubs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,19 +18,60 @@ namespace Infrastructure.Service
         private readonly UserAuthDbContext _userDb;
         private readonly IHubContext<NotificationHub> _hub;
 
-        public NotificationService(DBContext db, IHubContext<NotificationHub> hub, UserAuthDbContext userDb)
+        public NotificationService(
+            DBContext db,
+            IHubContext<NotificationHub> hub,
+            UserAuthDbContext userDb)
         {
             _db = db;
             _hub = hub;
             _userDb = userDb;
         }
 
-        // -------------------------------
+
+        public async Task<CursorResult<NotificationDto>> GetAllNotificationsCursorAsync(
+    DateTime? cursor,
+    int limit)
+        {
+            var query = _db.Notifications.AsNoTracking();
+
+            if (cursor.HasValue)
+                query = query.Where(n => n.CreatedAt < cursor.Value);
+
+            var items = await query
+                .OrderByDescending(n => n.CreatedAt)
+                .Take(limit + 1)
+                .Select(n => new NotificationDto(
+                    n.Id,
+                    n.Title,
+                    n.Text,
+                    n.CreatedAt,
+                    n.ExpiresAt,
+                    n.Priority
+                ))
+                .ToListAsync();
+
+            var hasMore = items.Count > limit;
+
+            if (hasMore)
+                items.RemoveAt(items.Count - 1);
+
+            return new CursorResult<NotificationDto>
+            {
+                Items = items,
+                HasMore = hasMore,
+                NextCursor = items.LastOrDefault()?.CreatedAt
+            };
+        }
+
+
+        // -----------------------------------------------------
         // CREATE NOTIFICATION FOR ALL USERS
-        // -------------------------------
+        // -----------------------------------------------------
         public async Task<NotificationDto> CreateForUsersAsync(NotificationCreateRequest req)
         {
             var now = DateTime.UtcNow;
+
             var notification = new Notification
             {
                 Title = req.Title,
@@ -43,22 +84,19 @@ namespace Infrastructure.Service
             _db.Notifications.Add(notification);
             await _db.SaveChangesAsync();
 
-            // Fetch all users from UserAuthService DB and convert Id to string
-            var users = await _userDb.Users
-                .Select(u => new { UserIdString = u.Id.ToString() })
+            var userIds = await _userDb.Users
+                .Select(u => u.Id.ToString())
                 .ToListAsync();
 
-            foreach (var user in users)
+            foreach (var userId in userIds)
             {
-                var recipient = new NotificationRecipient
+                _db.NotificationRecipients.Add(new NotificationRecipient
                 {
                     NotificationId = notification.Id,
-                    UserId = user.UserIdString
-                };
+                    UserId = userId
+                });
 
-                _db.NotificationRecipients.Add(recipient);
-
-                await _hub.Clients.User(user.UserIdString).SendAsync(
+                await _hub.Clients.User(userId).SendAsync(
                     "ReceiveNotification",
                     new NotificationDto(
                         notification.Id,
@@ -71,10 +109,8 @@ namespace Infrastructure.Service
                 );
             }
 
-            // Save recipients
             await _db.SaveChangesAsync();
 
-            // ✅ RETURN ADDED
             return new NotificationDto(
                 notification.Id,
                 notification.Title,
@@ -85,10 +121,65 @@ namespace Infrastructure.Service
             );
         }
 
+        // -----------------------------------------------------
+        // GET USER NOTIFICATIONS (CURSOR PAGINATION)
+        // -----------------------------------------------------
+        public async Task<CursorResult<NotificationRecipientDto>> GetForUserCursorAsync(
+            string userId,
+            bool unreadOnly,
+            DateTime? cursor,
+            int limit)
+        {
+            var query = _db.NotificationRecipients
+                .Include(r => r.Notification)
+                .Where(r => r.UserId == userId);
 
-        // -------------------------------
+            if (unreadOnly)
+                query = query.Where(r => !r.IsRead);
+
+            if (cursor.HasValue)
+                query = query.Where(r => r.CreatedAt < cursor.Value);
+
+            var items = await query
+                .OrderByDescending(r => r.CreatedAt)
+                .Take(limit + 1)
+                .ToListAsync();
+
+            var hasMore = items.Count > limit;
+
+            if (hasMore)
+                items.RemoveAt(items.Count - 1);
+
+            return new CursorResult<NotificationRecipientDto>
+            {
+                Items = items.Select(r => MapRecipientDto(r)).ToList(),
+                HasMore = hasMore,
+                NextCursor = items.LastOrDefault()?.CreatedAt
+            };
+        }
+
+        // -----------------------------------------------------
+        // SIMPLE USER FETCH (OPTIONAL / NON-PAGINATED)
+        // -----------------------------------------------------
+        public async Task<List<NotificationRecipientDto>> GetForUserAsync(string userId, bool unreadOnly)
+        {
+            var query = _db.NotificationRecipients
+                .Include(r => r.Notification)
+                .Where(r => r.UserId == userId);
+
+            if (unreadOnly)
+                query = query.Where(r => !r.IsRead);
+
+            var list = await query
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync();
+
+            return list.Select(MapRecipientDto).ToList();
+        }
+
+        // -----------------------------------------------------
         // MARK AS READ
-        // -------------------------------
+        // -----------------------------------------------------
         public async Task<bool> MarkAsReadAsync(Guid recipientId, string userId)
         {
             var rec = await _db.NotificationRecipients
@@ -103,14 +194,15 @@ namespace Infrastructure.Service
                 await _db.SaveChangesAsync();
             }
 
-            await _hub.Clients.User(userId).SendAsync("NotificationMarkedRead", recipientId);
+            await _hub.Clients.User(userId)
+                .SendAsync("NotificationMarkedRead", recipientId);
 
             return true;
         }
 
-        // -------------------------------
+        // -----------------------------------------------------
         // ACKNOWLEDGE
-        // -------------------------------
+        // -----------------------------------------------------
         public async Task<bool> AcknowledgeAsync(Guid recipientId, string userId)
         {
             var rec = await _db.NotificationRecipients
@@ -125,49 +217,66 @@ namespace Infrastructure.Service
                 await _db.SaveChangesAsync();
             }
 
-            await _hub.Clients.User(userId).SendAsync("NotificationAcknowledged", recipientId);
+            await _hub.Clients.User(userId)
+                .SendAsync("NotificationAcknowledged", recipientId);
 
             return true;
         }
 
-        // -------------------------------
-        // GET ALL NOTIFICATIONS (ADMIN VIEW)
-        // -------------------------------
-        public async Task<List<NotificationDto>> GetAllNotificationsAsync()
+        // -----------------------------------------------------
+        // GET ALL NOTIFICATIONS (ADMIN)
+        // -----------------------------------------------------
+        //public async Task<List<NotificationDto>> GetAllNotificationsAsync()
+        //{
+        //    return await _db.Notifications
+        //        .AsNoTracking()
+        //        .OrderByDescending(n => n.CreatedAt)
+        //        .Select(n => new NotificationDto(
+        //            n.Id,
+        //            n.Title,
+        //            n.Text,
+        //            n.CreatedAt,
+        //            n.ExpiresAt,
+        //            n.Priority
+        //        ))
+        //        .ToListAsync();
+        //}
+
+        // -----------------------------------------------------
+        // MARK ALL AS READ
+        // -----------------------------------------------------
+        public async Task<bool> MarkAllAsReadAsync(string userId)
         {
-            var list = await _db.Notifications
-                .AsNoTracking()
-                .OrderByDescending(n => n.CreatedAt)
-                .Select(n => new NotificationDto(
-                    n.Id,
-                    n.Title,
-                    n.Text,
-                    n.CreatedAt,
-                    n.ExpiresAt,
-                    n.Priority
-                ))
+            var recs = await _db.NotificationRecipients
+                .Where(r => r.UserId == userId && !r.IsRead)
                 .ToListAsync();
 
-            return list;
+            if (!recs.Any())
+                return false;
+
+            foreach (var r in recs)
+            {
+                r.IsRead = true;
+                r.ReadAt = DateTime.UtcNow;
+            }
+
+            await _db.SaveChangesAsync();
+
+            foreach (var r in recs)
+            {
+                await _hub.Clients.User(userId)
+                    .SendAsync("NotificationMarkedRead", r.Id);
+            }
+
+            return true;
         }
 
-        // -------------------------------
-        // GET USER NOTIFICATIONS (PER USER)
-        // -------------------------------
-        public async Task<List<NotificationRecipientDto>> GetForUserAsync(string userId, bool unreadOnly)
+        // -----------------------------------------------------
+        // PRIVATE MAPPER (CLEAN CODE)
+        // -----------------------------------------------------
+        private static NotificationRecipientDto MapRecipientDto(NotificationRecipient r)
         {
-            var query = _db.NotificationRecipients
-                .Include(r => r.Notification)
-                .Where(r => r.UserId == userId);
-
-            if (unreadOnly)
-                query = query.Where(r => !r.IsRead);
-
-            var list = await query
-                .OrderByDescending(r => r.CreatedAt)
-                .ToListAsync();
-
-            return list.Select(r => new NotificationRecipientDto
+            return new NotificationRecipientDto
             {
                 RecipientId = r.Id,
                 NotificationId = r.NotificationId,
@@ -178,41 +287,7 @@ namespace Infrastructure.Service
                 CreatedAt = r.CreatedAt,
                 ReadAt = r.ReadAt,
                 AcknowledgedAt = r.AcknowledgedAt
-            }).ToList();
+            };
         }
-
-
-
-        // -------------------------------
-        // MARK ALL AS READ
-        // -------------------------------
-        public async Task<bool> MarkAllAsReadAsync(string userId)
-        {
-            var recipients = await _db.NotificationRecipients
-                .Where(r => r.UserId == userId && !r.IsRead)
-                .ToListAsync();
-
-            if (!recipients.Any())
-                return false;
-
-            foreach (var rec in recipients)
-            {
-                rec.IsRead = true;
-                rec.ReadAt = DateTime.UtcNow;
-            }
-
-            await _db.SaveChangesAsync();
-
-            // Notify user via SignalR for each notification
-            foreach (var rec in recipients)
-            {
-                await _hub.Clients.User(userId).SendAsync("NotificationMarkedRead", rec.Id);
-            }
-
-            return true;
-        }
-
-
-
     }
 }
