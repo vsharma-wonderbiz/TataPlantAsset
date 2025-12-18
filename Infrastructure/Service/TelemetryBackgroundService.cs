@@ -1,5 +1,6 @@
 ﻿using Application.DTOs;
 using Application.Interface;
+using Domain.Entities;
 using Infrastructure.DBs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -38,6 +39,7 @@ namespace Infrastructure.Service
         private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly IAlertStateStore _alertStore;
 
+
         public TelemetryBackgroundService(
             ILogger<TelemetryBackgroundService> logger,
             IMappingCache mappingCache,
@@ -50,6 +52,7 @@ namespace Infrastructure.Service
             _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _alertStore = alertStore ?? throw new ArgumentNullException(nameof(alertStore));
+
         }
 
         private object BuildNotificationPayload(
@@ -190,6 +193,8 @@ namespace Infrastructure.Service
                 // write telemetry and handle alert/notification flow in a scope
                 using var scope = _serviceProvider.CreateScope();
                 var influxService = scope.ServiceProvider.GetRequiredService<IInfluxTelementryService>();
+                var _alertRepo = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
+
                 await influxService.WriteTelemetryAsync(influxDto);
 
                 var assetService = scope.ServiceProvider.GetRequiredService<IAssetHierarchyService>();
@@ -253,9 +258,48 @@ namespace Infrastructure.Service
                         var mappingKey = mapping.MappingId; // unique key for alert store
 
                         bool isOutOfRange = influxDto.Value < signal.MinThreshold || influxDto.Value > signal.MaxThreshold;
+                        var activeAlert = await _alertRepo.GetActiveAsync(mapping.MappingId);
+
 
                         if (isOutOfRange)
                         {
+
+                            if (activeAlert == null)
+                            {
+                                var alert = new Alert
+                                {
+                                    AlertId = Guid.NewGuid(),
+
+                                    AssetId = mapping.AssetId,
+                                    AssetName = assetName,
+
+                                    SignalTypeId = mapping.SignalTypeId,
+                                    SignalName = signal.SignalName,
+
+                                    MappingId = mapping.MappingId,
+
+                                    AlertStartUtc = now,
+                                    IsActive = true,
+                                    IsAnalyzed = false,
+
+                                    MinThreshold = signal.MinThreshold,
+                                    MaxThreshold = signal.MaxThreshold,
+
+                                    MinObservedValue = influxDto.Value,
+                                    MaxObservedValue = influxDto.Value,
+
+                                    ReminderTimeHours = 24,
+
+                                    CreatedUtc = now,
+                                    UpdatedUtc = now
+                                };
+
+                                await _alertRepo.CreateAsync(alert);
+                            }
+                            else
+                            {
+                                await _alertRepo.UpdateStatsAsync(activeAlert.AlertId, influxDto.Value);
+                            }
                             // check if there is already an active alert
                             var current = await _alertStore.GetAsync(mappingKey);
                             if (current == null || !current.IsActive)
@@ -289,6 +333,11 @@ namespace Infrastructure.Service
                         }
                         else
                         {
+
+                            if (activeAlert != null)
+                            {
+                                await _alertRepo.ResolveAsync(activeAlert.AlertId, now);
+                            }
                             // value back to normal — if active then clear and send resolved notification
                             var active = await _alertStore.GetAsync(mappingKey);
                             if (active != null && active.IsActive)

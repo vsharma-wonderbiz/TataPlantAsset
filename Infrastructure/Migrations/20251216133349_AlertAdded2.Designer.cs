@@ -4,6 +4,7 @@ using Infrastructure.DBs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(DBContext))]
-    partial class DBContextModelSnapshot : ModelSnapshot
+    [Migration("20251216133349_AlertAdded2")]
+    partial class AlertAdded2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -46,10 +49,14 @@ namespace Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsAnalyzed")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<Guid>("MappingId")
                         .HasColumnType("uniqueidentifier");
@@ -66,8 +73,13 @@ namespace Infrastructure.Migrations
                     b.Property<double>("MinThreshold")
                         .HasColumnType("float");
 
+                    b.Property<string>("RecommendedActions")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("ReminderTimeHours")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(24);
 
                     b.Property<string>("SignalName")
                         .IsRequired()
@@ -82,42 +94,13 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("AlertId");
 
-                    b.HasIndex("MappingId");
+                    b.HasIndex("AssetId", "AlertStartUtc")
+                        .HasDatabaseName("IX_Alerts_Asset_Time");
 
-                    b.HasIndex("AssetId", "IsAnalyzed");
+                    b.HasIndex("MappingId", "IsActive")
+                        .HasDatabaseName("IX_Alerts_Mapping_Active");
 
                     b.ToTable("Alerts");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AlertAnalysis", b =>
-                {
-                    b.Property<Guid>("AlertAnalysisId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("AnalyzedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("AssetId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AssetName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("FromUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("RecommendedActions")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("ToUtc")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("AlertAnalysisId");
-
-                    b.ToTable("AlertAnalyses");
                 });
 
             modelBuilder.Entity("Domain.Entities.Asset", b =>
@@ -237,43 +220,6 @@ namespace Infrastructure.Migrations
                     b.HasIndex("UserId", "CreatedAt");
 
                     b.ToTable("NotificationRecipients");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ReportRequest", b =>
-                {
-                    b.Property<Guid>("ReportId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("AssetId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AssetName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("RequestedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("SignalIds")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("ReportId");
-
-                    b.ToTable("ReportRequests");
                 });
 
             modelBuilder.Entity("Domain.Entities.SignalData", b =>

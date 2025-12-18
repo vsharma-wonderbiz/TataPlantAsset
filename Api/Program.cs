@@ -145,6 +145,9 @@ builder.Services.AddScoped<IMappingService, AssetMappingService>();
 
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddHostedService<ExpiredNotificationCleanupService>();
+builder.Services.AddScoped<IAlertRepository, AlertRepository>();
+builder.Services.AddScoped<IAlertAnalysisRepository, AlertAnalysisRepository>();
+
 
 // Mapping Cache
 builder.Services.AddSingleton<IMappingCache>(sp =>
@@ -166,6 +169,8 @@ builder.Services.AddSingleton<RabbitMqService>();
 // -------------------------------------------------------
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, NameIdentifierUserIdProvider>();
+builder.Services.AddHttpClient();
+
 
 // -------------------------------------------------------
 //  BUILD APP
