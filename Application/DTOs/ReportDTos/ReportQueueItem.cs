@@ -8,13 +8,13 @@ namespace Application.DTOs.ReportDTos
 {
     public class ReportQueueItem
     {
-        public Guid AssetId { get; set; }
-        public List<Guid> SignalIds { get; set; }
+        public string AssetId { get; set; }
+        public List<string> SignalIds { get; set; } 
         public List<string> MappingIds { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
-        public string ReportFormat { get; set; }
-        public long TotalRows { get; set; }
+        public string ReportFormat { get; set; } // "Excel" or "CSV"
+        public int TotalRows { get; set; }
         public DateTime RequestedAt { get; set; }
     }
 }

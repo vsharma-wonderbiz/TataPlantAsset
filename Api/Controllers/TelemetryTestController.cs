@@ -180,45 +180,45 @@ namespace WebAPI.Controllers
         }
 
 
-        [HttpPost("ReportRequest")]
-        public async Task<IActionResult> GenerateReport([FromBody] RequestReport dto)
-        {
-            try
-            {
+        //[HttpPost("ReportRequest")]
+        //public async Task<IActionResult> GenerateReport([FromBody] RequestReport dto)
+        //{
+        //    try
+        //    {
                 
-                if (dto.AssetID == Guid.Empty)
-                    throw new Exception("Please provide a valid AssetId");
+        //        if (dto.AssetID == Guid.Empty)
+        //            throw new Exception("Please provide a valid AssetId");
 
                
-                if (dto.SignalIDs == null || dto.SignalIDs.Count == 0)
-                    throw new Exception("Please provide at least one SignalID");
+        //        if (dto.SignalIDs == null || dto.SignalIDs.Count == 0)
+        //            throw new Exception("Please provide at least one SignalID");
 
-                if (!dto.SignalIDs.Any(id => id != Guid.Empty))
-                    throw new Exception("SignalIDs cannot contain only empty GUIDs");
+        //        if (!dto.SignalIDs.Any(id => id != Guid.Empty))
+        //            throw new Exception("SignalIDs cannot contain only empty GUIDs");
 
                
-                if (!dto.StartDate.HasValue)
-                    throw new Exception("StartDate is required");
+        //        if (!dto.StartDate.HasValue)
+        //            throw new Exception("StartDate is required");
 
-                if (!dto.EndDate.HasValue)
-                    throw new Exception("EndDate is required");
+        //        if (!dto.EndDate.HasValue)
+        //            throw new Exception("EndDate is required");
 
-                if (dto.EndDate.Value < dto.StartDate.Value)
-                    throw new Exception("EndDate cannot be earlier than StartDate");
+        //        if (dto.EndDate.Value < dto.StartDate.Value)
+        //            throw new Exception("EndDate cannot be earlier than StartDate");
 
-                if ((dto.EndDate.Value - dto.StartDate.Value).TotalDays > 31)
-                    throw new Exception("Date range cannot exceed 31 days");
+        //        if ((dto.EndDate.Value - dto.StartDate.Value).TotalDays > 31)
+        //            throw new Exception("Date range cannot exceed 31 days");
 
 
-                await _TelementryService.PushToReportRequestQueueAsync(dto);
+        //        await _TelementryService.PushToReportRequestQueueAsync(dto);
 
-                return Ok(new { message = "Report request accepted" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
-        }
+        //        return Ok(new { message = "Report request accepted" });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return BadRequest(new { error = ex.Message });
+        //    }
+        //}
 
     }
 }

@@ -17,6 +17,8 @@ namespace Infrastructure.DBs
         public DbSet<NotificationRecipient> NotificationRecipients { get; set; } = null!;
         public DbSet<AssetSignalDeviceMapping> MappingTable { get; set; } = null!;
         public DbSet<SignalData> SignalData { get; set; } = null!;
+        public DbSet<ReportRequest> ReportRequests { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

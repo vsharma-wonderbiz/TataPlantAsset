@@ -156,6 +156,7 @@ builder.Services.AddSingleton<IMappingCache>(sp =>
 // Background Tasks
 builder.Services.AddHostedService<InfluxDbInitializationService>();
 builder.Services.AddHostedService<TelemetryBackgroundService>();
+builder.Services.AddHostedService<ReportGenerationService>();
 
 builder.Services.AddSingleton<IAlertStateStore, MemoryAlertStateStore>();
 builder.Services.AddSingleton<RabbitMqService>();
