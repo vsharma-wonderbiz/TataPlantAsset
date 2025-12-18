@@ -17,6 +17,9 @@ namespace Infrastructure.DBs
         public DbSet<NotificationRecipient> NotificationRecipients { get; set; } = null!;
         public DbSet<AssetSignalDeviceMapping> MappingTable { get; set; } = null!;
         public DbSet<SignalData> SignalData { get; set; } = null!;
+        public DbSet<Alert> Alerts { get; set; } = null!;
+        public DbSet<AlertAnalysis> AlertAnalyses { get; set; }
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -103,6 +106,28 @@ namespace Infrastructure.DBs
                 b.Property(r => r.CreatedAt).IsRequired();
                 b.HasIndex(r => new { r.UserId, r.CreatedAt });
             });
+
+            modelBuilder.Entity<Alert>(b =>
+            {
+                b.HasKey(a => a.AlertId);
+
+                b.Property(a => a.AssetName).HasMaxLength(200).IsRequired();
+                b.Property(a => a.SignalName).HasMaxLength(200).IsRequired();
+
+                b.HasIndex(a => new { a.AssetId, a.IsAnalyzed });
+                b.HasIndex(a => a.MappingId);
+            });
+
+
+            modelBuilder.Entity<AlertAnalysis>(b =>
+            {
+                b.HasKey(a => a.AlertAnalysisId);
+
+                b.Property(a => a.RecommendedActions).IsRequired();
+
+            });
+
+
         }
     }
 }
