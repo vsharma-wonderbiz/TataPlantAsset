@@ -17,6 +17,7 @@ namespace Infrastructure.DBs
         public DbSet<NotificationRecipient> NotificationRecipients { get; set; } = null!;
         public DbSet<AssetSignalDeviceMapping> MappingTable { get; set; } = null!;
         public DbSet<SignalData> SignalData { get; set; } = null!;
+        public DbSet<ReportRequest> ReportRequests { get; set; }
         public DbSet<Alert> Alerts { get; set; } = null!;
         public DbSet<AlertAnalysis> AlertAnalyses { get; set; }
 

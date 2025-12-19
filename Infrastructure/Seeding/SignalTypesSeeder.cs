@@ -22,7 +22,7 @@ namespace Infrastructure.Seeding
                     new SignalTypes { SignalName = "Frequency",   SignalUnit = "Hz",    DefaultRegisterAdress = 40007, MinThreshold = 45, MaxThreshold = 65 },
                     new SignalTypes { SignalName = "Vibration",   SignalUnit = "mm/s",  DefaultRegisterAdress = 40009, MinThreshold = 0, MaxThreshold = 10 },
                     new SignalTypes { SignalName = "FlowRate",    SignalUnit = "L/min", DefaultRegisterAdress = 40011, MinThreshold = 1, MaxThreshold = 200 },
-                    new SignalTypes { SignalName = "RPM",         SignalUnit = "rpm",   DefaultRegisterAdress = 40013, MinThreshold = 100, MaxThreshold = 6000 },
+                    new SignalTypes { SignalName = "RPM",         SignalUnit = "rpm",   DefaultRegisterAdress = 40013, MinThreshold = 100, MaxThreshold = 600 },
                     new SignalTypes { SignalName = "Torque",      SignalUnit = "Nm",    DefaultRegisterAdress = 40015, MinThreshold = 0, MaxThreshold = 500 }
                 };
 

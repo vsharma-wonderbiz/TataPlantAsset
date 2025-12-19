@@ -11,8 +11,7 @@ namespace Application.Interface
         public  Guid MappingId { get; set; }
         public Guid AssetId { get; init; }
         public Guid DeviceId { get ; set; } 
-        public Guid DeviceSlaveID { get ; set; }    
-
+        public Guid DeviceSlaveID { get ; set; }
         public Guid SignalTypeId { get; init; }
         public string SignalName { get; init; }
         public string SignalUnit { get; init; }
