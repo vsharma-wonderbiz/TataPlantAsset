@@ -231,14 +231,14 @@ namespace Infrastructure.Service
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DBContext>();
 
-            // 🔹 Parse AssetId
+            
             if (!Guid.TryParse(request.AssetId, out var assetId))
             {
                 _logger.LogError("Invalid AssetId: {AssetId}", request.AssetId);
                 return;
             }
 
-            // 🔹 Fetch Asset Name (at START)
+           
             var assetName = await db.Assets
                 .AsNoTracking()
                 .Where(a => a.AssetId == assetId)
@@ -247,25 +247,25 @@ namespace Infrastructure.Service
 
             assetName ??= request.AssetId;
 
-            // 🔹 Sanitize asset name for filename
+          
             var safeAssetName = string.Concat(
                 assetName.Split(Path.GetInvalidFileNameChars())
             );
 
-            // 🔹 Create file name using Asset Name
+         
             var fileName = $"Report_{safeAssetName}_{DateTime.UtcNow:yyyy/MMdd/_HHmmss}.xlsx";
             var filePath = Path.Combine(_reportsFolder, fileName);
 
             using var workbook = new XLWorkbook();
 
-            // 🔹 Convert SignalIds to GUIDs
+            
             var signalGuids = request.SignalIds
                 .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
                 .Where(g => g != Guid.Empty)
                 .Distinct()
                 .ToList();
 
-            // 🔹 Fetch Signal Names in ONE query
+          
             var signalNameMap = await db.SignalTypes
                 .AsNoTracking()
                 .Where(s => signalGuids.Contains(s.SignalTypeID))
@@ -278,7 +278,7 @@ namespace Infrastructure.Service
 
                 var signalName = signalNameMap.GetValueOrDefault(signalId, signalIdStr);
 
-                // 🔹 Fetch Influx data
+      
                 var data = await FetchDataFromInfluxDBAsync(
                     request.AssetId,
                     signalIdStr,
@@ -290,11 +290,11 @@ namespace Infrastructure.Service
                 if (data.Count == 0)
                     continue;
 
-                // 🔹 Create sheet
+               
                 var sheetName = SanitizeSheetName(signalName);
                 var ws = workbook.Worksheets.Add(sheetName);
 
-                // 🔹 Headers
+            
                 ws.Cell(1, 1).Value = "Asset Name";
                 ws.Cell(1, 2).Value = "Signal Name";
                 ws.Cell(1, 3).Value = "Timestamp";
@@ -303,7 +303,7 @@ namespace Infrastructure.Service
 
                 ws.Range(1, 1, 1, 5).Style.Font.Bold = true;
 
-                // 🔹 Insert data
+              
                 int row = 2;
                 foreach (var r in data)
                 {
@@ -341,45 +341,101 @@ namespace Infrastructure.Service
 
         private async Task GenerateCsvReportAsync(ReportQueueItem request, int limitPerSignal)
         {
-            var fileName = $"Report_{request.AssetId}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<DBContext>();
+
+            if (!Guid.TryParse(request.AssetId, out var assetId))
+            {
+                _logger.LogError("Invalid AssetId: {AssetId}", request.AssetId);
+                return;
+            }
+
+         
+            var assetName = await db.Assets
+                .AsNoTracking()
+                .Where(a => a.AssetId == assetId)
+                .Select(a => a.Name)
+                .FirstOrDefaultAsync();
+
+            assetName ??= request.AssetId;
+
+            var safeAssetName = string.Concat(
+                assetName.Split(Path.GetInvalidFileNameChars())
+            );
+
+            var fileName = $"Report_{safeAssetName}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
             var filePath = Path.Combine(_reportsFolder, fileName);
+
+         
+            var signalGuids = request.SignalIds
+                .Select(id => Guid.TryParse(id, out var g) ? g : Guid.Empty)
+                .Where(g => g != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            var signalNameMap = await db.SignalTypes
+                .AsNoTracking()
+                .Where(s => signalGuids.Contains(s.SignalTypeID))
+                .ToDictionaryAsync(s => s.SignalTypeID, s => s.SignalName);
 
             using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
             using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture));
 
-            // Write header
+            csv.WriteField("Asset Name");
+            csv.WriteField("Signal Name");
             csv.WriteField("Timestamp");
-            csv.WriteField("Signal ID");
             csv.WriteField("Value");
             csv.WriteField("Unit");
             await csv.NextRecordAsync();
 
-            foreach (var signalId in request.SignalIds)
+            foreach (var signalIdStr in request.SignalIds)
             {
-                _logger.LogInformation("Fetching data for Signal: {SignalId}", signalId);
+                if (!Guid.TryParse(signalIdStr, out var signalId))
+                    continue;
+
+                var signalName = signalNameMap.GetValueOrDefault(signalId, signalIdStr);
 
                 var data = await FetchDataFromInfluxDBAsync(
                     request.AssetId,
-                    signalId,
+                    signalIdStr,
                     request.StartDate,
                     request.EndDate,
                     limitPerSignal
                 );
 
+                if (data.Count == 0)
+                    continue;
+
                 foreach (var record in data)
                 {
+                    csv.WriteField(assetName);
+                    csv.WriteField(signalName);
                     csv.WriteField(record.Timestamp);
-                    csv.WriteField(record.SignalId);
                     csv.WriteField(record.Value);
                     csv.WriteField(record.Unit);
                     await csv.NextRecordAsync();
                 }
-
-                _logger.LogInformation("Added {Count} rows for Signal: {SignalId}", data.Count, signalId);
             }
 
-            _logger.LogInformation("CSV report saved: {FilePath}", filePath);
+            
+            var reportRequest = new ReportRequest
+            {
+                ReportId = Guid.NewGuid(),
+                AssetId = assetId,
+                AssetName = assetName,
+                SignalIds = string.Join(",", request.SignalIds),
+                FileName = fileName,
+                FilePath = filePath,
+                RequestedAt = DateTime.UtcNow,
+                Status = "Completed"
+            };
+
+            db.ReportRequests.Add(reportRequest);
+            await db.SaveChangesAsync();
+
+            _logger.LogInformation("CSV report created: {FilePath}", filePath);
         }
+
 
         private async Task<List<TelemetryRecord>> FetchDataFromInfluxDBAsync(
             string assetId,
