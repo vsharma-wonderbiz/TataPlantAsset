@@ -154,6 +154,8 @@ namespace Infrastructure.Service
                     return;
                 }
 
+
+
                 // Try both possible TryGet signatures (defensive)
                 bool mapped = false;
                 MappingInfo mapping = null;
@@ -189,6 +191,7 @@ namespace Infrastructure.Service
                     Unit = mapping.SignalUnit ?? dto.Unit,
                     Timestamp = dto.TimestampUtc
                 };
+                Console.WriteLine($"value from rabbitmq  { dto.Value}");
 
                 // write telemetry and handle alert/notification flow in a scope
                 using var scope = _serviceProvider.CreateScope();
@@ -259,13 +262,15 @@ namespace Infrastructure.Service
 
                         bool isOutOfRange = influxDto.Value < signal.MinThreshold || influxDto.Value > signal.MaxThreshold;
                         var activeAlert = await _alertRepo.GetActiveAsync(mapping.MappingId);
-
+                        Console.WriteLine($"Value: {influxDto.Value}, MinThreshold: {signal.MinThreshold} signal name: {signal.SignalName}");
+                        Console.WriteLine(isOutOfRange);
 
                         if (isOutOfRange)
                         {
 
                             if (activeAlert == null)
                             {
+                                Console.WriteLine("in active akert");
                                 var alert = new Alert
                                 {
                                     AlertId = Guid.NewGuid(),
@@ -298,6 +303,7 @@ namespace Infrastructure.Service
                             }
                             else
                             {
+                                Console.WriteLine("updating alert");
                                 await _alertRepo.UpdateStatsAsync(activeAlert.AlertId, influxDto.Value);
                             }
                             // check if there is already an active alert
